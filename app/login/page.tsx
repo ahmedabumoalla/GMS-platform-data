@@ -2,176 +2,244 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
-import { Lock, Mail, ArrowRight, Loader2, AlertCircle } from 'lucide-react';
+import { 
+  Lock, Mail, ArrowRight, Loader2, Globe, 
+  ChevronLeft, ChevronRight, ShieldCheck, AlertCircle 
+} from 'lucide-react';
 
 export default function LoginPage() {
   const router = useRouter();
-  const [loading, setLoading] = useState(false);
   
-  // States للبيانات
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  // --- State Management ---
+  const [lang, setLang] = useState<'ar' | 'en'>('ar');
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  
+  const [formData, setFormData] = useState({
+    email: '',
+    password: ''
+  });
+
+  // --- Dictionary ---
+  const t = {
+    ar: {
+      brandSub: 'منصة تخطيط الموارد المؤسسية',
+      welcomeTitle: 'مرحباً بك مجدداً',
+      welcomeDesc: 'بوابة الوصول الآمن لإدارة المشاريع، العمليات الميدانية، والموارد البشرية.',
+      signInTitle: 'تسجيل الدخول',
+      signInDesc: 'أدخل بيانات الاعتماد للوصول إلى لوحة التحكم',
+      emailLabel: 'البريد الإلكتروني الرسمي',
+      emailPlace: 'name@gms-sa.com',
+      passLabel: 'كلمة المرور',
+      passPlace: '••••••••',
+      forgot: 'نسيت كلمة المرور؟',
+      submit: 'تسجيل الدخول',
+      processing: 'جاري التحقق...',
+      backHome: 'العودة للرئيسية',
+      copyright: '© 2026 GMS Platform. جميع الحقوق محفوظة.',
+      secure: 'بوابة دخول آمنة ومراقبة',
+      errorEmpty: 'يرجى تعبئة جميع الحقول المطلوبة.',
+      errorInvalid: 'بيانات الاعتماد غير صحيحة. حاول مرة أخرى.',
+      support: 'الدعم الفني'
+    },
+    en: {
+      brandSub: 'Enterprise Resource Planning',
+      welcomeTitle: 'Welcome Back',
+      welcomeDesc: 'Secure gateway for project management, field operations, and HR resources.',
+      signInTitle: 'Sign In',
+      signInDesc: 'Enter your credentials to access the dashboard',
+      emailLabel: 'Official Email Address',
+      emailPlace: 'name@gms-sa.com',
+      passLabel: 'Password',
+      passPlace: '••••••••',
+      forgot: 'Forgot password?',
+      submit: 'Sign In',
+      processing: 'Verifying...',
+      backHome: 'Back to Home',
+      copyright: '© 2026 GMS Platform. All rights reserved.',
+      secure: 'Secure & Monitored Gateway',
+      errorEmpty: 'Please fill in all required fields.',
+      errorInvalid: 'Invalid credentials. Please try again.',
+      support: 'Technical Support'
+    }
+  };
+
+  const content = t[lang];
+  const isRTL = lang === 'ar';
+
+  // --- Handlers ---
+  const toggleLang = () => setLang(prev => prev === 'ar' ? 'en' : 'ar');
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
     setError('');
+    setLoading(true);
 
+    // 1. Basic Validation
+    if (!formData.email || !formData.password) {
+      setError(content.errorEmpty);
+      setLoading(false);
+      return;
+    }
+
+    // 2. Simulated API Call (Real Authentication Logic Placeholder)
     try {
-      // 1. طلب اتصال بالسيرفر (API Call)
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ email, password }),
-      });
+      // محاكاة تأخير الشبكة
+      await new Promise(resolve => setTimeout(resolve, 1500));
 
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.message || 'فشل تسجيل الدخول، تأكد من البيانات');
+      // محاكاة التحقق (يمكنك استبدال هذا بربط API حقيقي)
+      // For Demo: Accept any email containing '@' and password length > 4
+      if (formData.email.includes('@') && formData.password.length > 4) {
+        
+        // ✅ التوجيه الذكي: دائماً إلى الداشبورد
+        // النظام الداخلي (Middleware) هو المسؤول عن توجيه المستخدم 
+        // للصفحة المناسبة بناءً على دوره (Manager/Engineer/Admin)
+        router.push('/dashboard'); 
+        
+      } else {
+        throw new Error('Invalid Credentials');
       }
-
-      // 2. التوجيه الذكي بناءً على الصلاحية القادمة من قاعدة البيانات
-      // ملاحظة: تأكدنا أن الحروف صغيرة لتطابق قاعدة البيانات
-      const role = data.user.role; 
-
-      switch (role) {
-        case 'super_admin':
-          router.push('/admin');
-          break;
-        case 'manager':
-          router.push('/manager');
-          break;
-        case 'admin':
-          // يمكنك توجيه الأدمن لصفحة خاصة أو نفس لوحة السوبر أدمن بصلاحيات أقل
-          router.push('/admin'); 
-          break;
-        case 'employee':
-          router.push('/employee');
-          break;
-        default:
-          // في حال كان الدور غير معروف، يوجه للصفحة الرئيسية
-          router.push('/'); 
-      }
-
-    } catch (err: any) {
-      setError(err.message || 'حدث خطأ في الاتصال');
-    } finally {
+    } catch (err) {
+      setError(content.errorInvalid);
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-      {/* Background decoration */}
-      <div className="absolute top-0 left-0 w-full h-1/2 bg-blue-900 z-0"></div>
-      <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500 rounded-full blur-3xl opacity-20 z-0"></div>
-
-      <div className="bg-white rounded-3xl shadow-2xl overflow-hidden max-w-4xl w-full flex relative z-10 flex-col md:flex-row">
+    <div className={`min-h-screen bg-slate-50 flex items-center justify-center p-4 font-sans ${isRTL ? 'dir-rtl' : 'dir-ltr'}`} dir={isRTL ? 'rtl' : 'ltr'}>
+      
+      {/* Container */}
+      <div className="bg-white rounded-3xl shadow-2xl overflow-hidden max-w-5xl w-full flex relative z-10 flex-col md:flex-row min-h-[600px]">
         
-        {/* Left Side: Brand & Welcome */}
-        <div className="w-full md:w-1/2 bg-gradient-to-br from-blue-900 to-slate-900 p-12 text-white flex flex-col justify-between relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-40 h-40 bg-blue-500 rounded-full blur-[50px] opacity-30"></div>
+        {/* --- Left Side (Brand Panel) --- */}
+        <div className="w-full md:w-5/12 bg-slate-900 relative flex flex-col justify-between p-10 text-white overflow-hidden">
+          {/* Abstract Background Elements */}
+          <div className="absolute top-0 right-0 w-64 h-64 bg-blue-600/20 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
+          <div className="absolute bottom-0 left-0 w-64 h-64 bg-emerald-600/10 rounded-full blur-3xl translate-y-1/2 -translate-x-1/2"></div>
           
-          <div>
-            <div className="text-2xl font-black tracking-tighter mb-2">
-              GMS<span className="text-blue-400">Platform</span>
+          {/* Logo Area */}
+          <div className="relative z-10">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center font-bold text-lg shadow-lg shadow-blue-900/50">G</div>
+              <span className="text-2xl font-black tracking-tight">GMS Platform</span>
             </div>
-            <p className="text-blue-200 text-sm">Enterprise Resource Planning</p>
+            <p className="text-slate-400 text-xs font-medium uppercase tracking-wider">{content.brandSub}</p>
           </div>
 
-          <div className="my-12">
-            <h2 className="text-4xl font-bold mb-4">Welcome Back!</h2>
-            <p className="text-blue-200 leading-relaxed">
-              Access your dashboard to manage fleets, monitor cable testing projects, and track workforce performance in real-time.
+          {/* Welcome Message */}
+          <div className="relative z-10 my-12">
+            <h2 className="text-3xl font-bold mb-4 leading-tight">{content.welcomeTitle}</h2>
+            <p className="text-slate-300 leading-relaxed text-sm opacity-90">
+              {content.welcomeDesc}
             </p>
           </div>
 
-          <div className="text-xs text-blue-400">
-            © 2026 GMS Platform. Secure Access.
+          {/* Footer Info */}
+          <div className="relative z-10 text-xs text-slate-500 flex items-center gap-2">
+            <ShieldCheck size={14} className="text-emerald-500"/>
+            <span>{content.secure}</span>
           </div>
         </div>
 
-        {/* Right Side: Login Form */}
-        <div className="w-full md:w-1/2 p-12 bg-white">
-          <div className="text-center mb-10">
-            <h3 className="text-2xl font-bold text-slate-800">Employee Login</h3>
-            <p className="text-slate-500 mt-2">Please enter your credentials</p>
+        {/* --- Right Side (Form Panel) --- */}
+        <div className="w-full md:w-7/12 p-10 md:p-12 bg-white flex flex-col">
+          
+          {/* Top Controls (Back & Lang) */}
+          <div className="flex justify-between items-center mb-10">
+            <button 
+              onClick={() => router.push('/')}
+              className="flex items-center gap-1 text-sm text-slate-500 hover:text-slate-800 transition font-medium group"
+            >
+              {isRTL ? <ChevronRight size={16} className="group-hover:-mr-1 transition-all"/> : <ChevronLeft size={16} className="group-hover:-ml-1 transition-all"/>}
+              {content.backHome}
+            </button>
+
+            <button 
+              onClick={toggleLang} 
+              className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-50 text-slate-600 text-xs font-bold hover:bg-slate-100 transition border border-slate-200"
+            >
+              <Globe size={14}/> {isRTL ? 'English' : 'عربي'}
+            </button>
           </div>
 
-          <form onSubmit={handleLogin} className="space-y-6">
-            
-            {/* Email Input */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-700">Email Address</label>
-              <div className="relative">
-                <Mail className="absolute left-4 top-3.5 h-5 w-5 text-gray-400" />
+          {/* Form Header */}
+          <div className="mb-8">
+            <h3 className="text-2xl font-bold text-slate-900 mb-2">{content.signInTitle}</h3>
+            <p className="text-slate-500 text-sm">{content.signInDesc}</p>
+          </div>
+
+          {/* Error Message */}
+          {error && (
+            <div className="mb-6 p-4 rounded-xl bg-red-50 border border-red-100 flex items-start gap-3 animate-in fade-in slide-in-from-top-2">
+              <AlertCircle className="text-red-600 shrink-0 mt-0.5" size={18} />
+              <p className="text-sm text-red-700 font-medium">{error}</p>
+            </div>
+          )}
+
+          {/* Login Form */}
+          <form onSubmit={handleLogin} className="space-y-5 flex-1">
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-slate-700 uppercase tracking-wide">{content.emailLabel}</label>
+              <div className="relative group">
+                <Mail className="absolute left-4 top-3.5 h-5 w-5 text-slate-400 group-focus-within:text-blue-600 transition rtl:right-4 rtl:left-auto" />
                 <input 
                   type="email" 
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="employee@gms-platform.com"
-                  className="w-full pl-12 pr-4 py-3 bg-slate-50 text-slate-900 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all placeholder:text-gray-400"
-                  required 
+                  value={formData.email}
+                  onChange={(e) => setFormData({...formData, email: e.target.value})}
+                  placeholder={content.emailPlace}
+                  className="w-full pl-12 pr-4 py-3 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition rtl:pr-12 rtl:pl-4 disabled:bg-slate-50 disabled:cursor-not-allowed"
+                  disabled={loading}
+                  autoFocus
                 />
               </div>
             </div>
 
-            {/* Password Input */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-700">Password</label>
-              <div className="relative">
-                <Lock className="absolute left-4 top-3.5 h-5 w-5 text-gray-400" />
+            <div className="space-y-1.5">
+              <div className="flex justify-between items-center">
+                <label className="text-xs font-bold text-slate-700 uppercase tracking-wide">{content.passLabel}</label>
+                <a href="#" className="text-xs text-blue-600 hover:text-blue-700 font-medium hover:underline">{content.forgot}</a>
+              </div>
+              <div className="relative group">
+                <Lock className="absolute left-4 top-3.5 h-5 w-5 text-slate-400 group-focus-within:text-blue-600 transition rtl:right-4 rtl:left-auto" />
                 <input 
                   type="password" 
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="w-full pl-12 pr-4 py-3 bg-slate-50 text-slate-900 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all placeholder:text-gray-400"
-                  required 
+                  value={formData.password}
+                  onChange={(e) => setFormData({...formData, password: e.target.value})}
+                  placeholder={content.passPlace}
+                  className="w-full pl-12 pr-4 py-3 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition rtl:pr-12 rtl:pl-4 disabled:bg-slate-50 disabled:cursor-not-allowed"
+                  disabled={loading}
                 />
-              </div>
-              <div className="flex justify-end">
-                <a href="#" className="text-sm text-blue-600 hover:text-blue-800 font-medium">Forgot Password?</a>
               </div>
             </div>
 
-            {/* Error Message Display Area */}
-            {error && (
-              <div className="flex items-center gap-2 text-red-600 text-sm bg-red-50 p-3 rounded-lg animate-pulse">
-                <AlertCircle className="w-4 h-4" /> {error}
-              </div>
-            )}
-
-            {/* Submit Button */}
-            <button 
-              type="submit" 
-              disabled={loading}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl shadow-lg shadow-blue-200 transition-all flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
-            >
-              {loading ? (
-                <>
-                  <Loader2 className="w-5 h-5 animate-spin" /> Authenticating...
-                </>
-              ) : (
-                <>
-                  Sign In <ArrowRight className="w-5 h-5" />
-                </>
-              )}
-            </button>
+            <div className="pt-2">
+              <button 
+                type="submit" 
+                disabled={loading}
+                className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-slate-900/20 transition-all active:scale-[0.98] flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="animate-spin w-5 h-5" />
+                    <span>{content.processing}</span>
+                  </>
+                ) : (
+                  <>
+                    <span>{content.submit}</span>
+                    <ArrowRight className={`w-5 h-5 ${isRTL ? 'rotate-180' : ''}`} />
+                  </>
+                )}
+              </button>
+            </div>
           </form>
 
-          <div className="mt-8 text-center">
-            <Link href="/" className="text-slate-400 hover:text-slate-600 text-sm flex items-center justify-center gap-1 transition">
-              ← Back to Homepage
-            </Link>
+          {/* Form Footer */}
+          <div className="mt-8 pt-6 border-t border-slate-100 flex justify-between items-center text-xs text-slate-400">
+            <span>{content.copyright}</span>
+            <a href="#" className="hover:text-slate-600 transition">{content.support}</a>
           </div>
-        </div>
 
+        </div>
       </div>
     </div>
   );

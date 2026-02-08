@@ -10,38 +10,38 @@ export default function LocationTracker({ userId }: { userId: number }) {
     const sendLocation = (position: GeolocationPosition) => {
       const { latitude, longitude } = position.coords;
 
-      // 1. تحديث الموقع الحالي في جدول المستخدمين (للعرض اللحظي)
-      supabase.from('users').update({ 
-        lat: latitude, 
-        lng: longitude,
-        last_location_update: new Date().toISOString()
-      }).eq('id', userId).then();
+      supabase
+        .from('users')
+        .update({
+          lat: latitude,
+          lng: longitude,
+          last_location_update: new Date().toISOString(),
+        })
+        .eq('id', userId);
 
-      // 2. إضافة سجل جديد في جدول التاريخ (لرسم المسار)
-      supabase.from('location_logs').insert({
-        user_id: userId,
-        lat: latitude,
-        lng: longitude
-      }).then();
+      supabase
+        .from('location_logs')
+        .insert({
+          user_id: userId,
+          lat: latitude,
+          lng: longitude,
+        });
     };
 
-    const handleError = (error: any) => {
-      console.error("Error getting location", error);
+    const handleError = (error: GeolocationPositionError) => {
+      console.error('Location error:', error);
     };
 
-    // طلب الموقع ومراقبته
-    if ('geolocation' in navigator) {
-      // إرسال فوري عند الفتح
+    if (!('geolocation' in navigator)) return;
+
+    navigator.geolocation.getCurrentPosition(sendLocation, handleError);
+
+    const intervalId = setInterval(() => {
       navigator.geolocation.getCurrentPosition(sendLocation, handleError);
+    }, 60000);
 
-      // إعداد مؤقت للإرسال كل 60 ثانية (لتخفيف الضغط على القاعدة)
-      const intervalId = setInterval(() => {
-        navigator.geolocation.getCurrentPosition(sendLocation, handleError);
-      }, 60000); // كل دقيقة
-
-      return () => clearInterval(intervalId);
-    }
+    return () => clearInterval(intervalId);
   }, [userId]);
 
-  return null; // هذا المكون لا يعرض شيئاً، هو يعمل في الخلفية فقط
+  return null;
 }
