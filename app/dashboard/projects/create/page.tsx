@@ -7,11 +7,14 @@ import {
   MapPin, Users, Calendar, FileText, 
   Shield, ArrowLeft, ArrowRight, 
   Cpu, Sparkles, CheckCircle2, ChevronDown, 
-  Briefcase, Globe, Layers, Save, UploadCloud, HardHat, FileCheck, X, Plus, Loader2
+  Briefcase, Layers, Save, UploadCloud, HardHat, FileCheck, X, Plus, Loader2
 } from 'lucide-react';
 
-// استدعاء الخريطة ديناميكياً لتجنب مشاكل المتصفح والسيرفر
-// ملاحظة: تم إضافة loading fallback لتظهر أثناء تحميل ملف الخريطة الضخم
+// ✅ استيراد الكونتكست العام (تأكد أن المسار صحيح حسب مكان ملفك)
+// إذا كان الملف في app/dashboard/projects/create/page.tsx فالمسار الصحيح هو:
+import { useDashboard } from '../../layout'; 
+
+// استدعاء الخريطة ديناميكياً
 const ProjectMapPicker = dynamic(() => import('@/components/ProjectMapPicker'), { 
   ssr: false,
   loading: () => <div className="h-full w-full bg-slate-100 animate-pulse flex items-center justify-center text-slate-400 rounded-2xl">جاري تهيئة الخريطة...</div>
@@ -21,7 +24,6 @@ const ProjectMapPicker = dynamic(() => import('@/components/ProjectMapPicker'), 
 type ProjectCategory = 'Maintenance' | 'Cable Testing' | 'Infrastructure' | 'Tech Support' | 'Emergency';
 type RiskLevel = 'Low' | 'Medium' | 'High' | 'Critical';
 
-// تعريف نوع عضو الفريق بدقة لتجنب أخطاء React
 interface TeamMember {
   name: string;
   role: string;
@@ -40,7 +42,7 @@ interface ProjectData {
   locationName: string;
   coordinates: { lat: number; lng: number };
   manager: string;
-  team: TeamMember[]; // استخدام النوع المعرف
+  team: TeamMember[];
   equipment: string[];
   complianceItems: Record<string, boolean>;
 }
@@ -55,8 +57,11 @@ const STEPS = [
 
 export default function EnterpriseProjectCreate() {
   const router = useRouter();
+  
+  // ✅ استخدام اللغة من الكونتكست العام للنظام
+  const { lang } = useDashboard(); 
+  
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [lang, setLang] = useState<'ar' | 'en'>('ar');
   const [currentStep, setCurrentStep] = useState(1);
   const [isAiLoading, setIsAiLoading] = useState(false);
   
@@ -87,7 +92,6 @@ export default function EnterpriseProjectCreate() {
   // --- Handlers ---
   const handleNext = () => setCurrentStep(prev => Math.min(prev + 1, STEPS.length));
   const handleBack = () => setCurrentStep(prev => Math.max(prev - 1, 1));
-  const toggleLang = () => setLang(prev => prev === 'ar' ? 'en' : 'ar');
 
   const addTeamMember = () => {
     if (newTeamMember.trim()) {
@@ -122,7 +126,7 @@ export default function EnterpriseProjectCreate() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'generate-project',
-          lang,
+          lang, // تمرير اللغة الحالية للـ API
           data: { title: formData.title }
         })
       });
@@ -171,9 +175,7 @@ export default function EnterpriseProjectCreate() {
           </div>
 
           <div className="flex items-center gap-3">
-            <button onClick={toggleLang} className="flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 rounded-xl text-xs font-bold text-slate-700 transition">
-              <Globe size={16} /> {lang === 'ar' ? 'English' : 'عربي'}
-            </button>
+             {/* تم إزالة زر تغيير اللغة من هنا، الاعتماد الآن على الهيدر الرئيسي */}
             <button className="px-6 py-2.5 bg-slate-900 text-white rounded-xl text-sm font-bold hover:bg-slate-800 hover:shadow-lg hover:shadow-slate-300 transition-all active:scale-95">
               {lang === 'ar' ? 'إنشاء المشروع' : 'Create Project'}
             </button>
@@ -379,7 +381,6 @@ export default function EnterpriseProjectCreate() {
                         </div>
                         
                         <div className="flex flex-wrap gap-2 mt-2 min-h-[40px]">
-                            {/* تم إصلاح عرض الكائن هنا */}
                             {formData.team.map((member, idx) => (
                                 <span key={idx} className="bg-white pl-4 pr-2 py-2 rounded-xl text-sm font-bold text-slate-700 flex items-center gap-3 border border-slate-200 shadow-sm animate-in zoom-in duration-300">
                                     <span className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex flex-col items-center justify-center text-[10px] leading-tight">

@@ -1,12 +1,15 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   CheckCircle2, Clock, AlertTriangle, Camera, Mic, 
   Send, MapPin, FileText, ChevronDown, ChevronUp, Globe, 
   Briefcase, Save, ShieldAlert, Sparkles, Loader2, X, 
   UploadCloud, Lock, Check, Calendar
 } from 'lucide-react';
+
+// ✅ استيراد الكونتكست العام
+import { useDashboard } from '../../layout'; 
 
 // --- Types & Interfaces ---
 type StatusType = 'Not Started' | 'In Progress' | 'Completed' | 'Blocked' | 'Delayed';
@@ -23,7 +26,9 @@ interface Task {
 }
 
 export default function EnterpriseFieldUpdatePage() {
-  const [lang, setLang] = useState<'ar' | 'en'>('ar');
+  // ✅ استخدام اللغة من النظام العام
+  const { lang } = useDashboard();
+  
   const [activeTask, setActiveTask] = useState<string | null>(null);
   
   // AI & Processing States
@@ -37,31 +42,33 @@ export default function EnterpriseFieldUpdatePage() {
   const [risk, setRisk] = useState<RiskLevel>('Low');
   const [attachments, setAttachments] = useState<string[]>([]);
 
-  // Mock Data
-  const tasks: Task[] = [
-    { 
-      id: 'TSK-2024-101', 
-      title: lang === 'ar' ? 'تركيب العدادات الذكية - قطاع 4' : 'Smart Meter Installation - Sector 4', 
-      project: lang === 'ar' ? 'مشروع البنية التحتية للكهرباء' : 'Electrical Infrastructure Project', 
-      projectId: 'PRJ-ELEC-04',
-      location: 'Riyadh, Al-Malqa', 
-      dueDate: '2024-02-25',
-      currentSystemProgress: 65 
-    },
-    { 
-      id: 'TSK-2024-102', 
-      title: lang === 'ar' ? 'فحص جودة التمديدات الأرضية' : 'Underground Cabling QA Inspection', 
-      project: lang === 'ar' ? 'مشروع شبكات المياه' : 'Water Network Project', 
-      projectId: 'PRJ-WATER-09',
-      location: 'Jeddah, North Obhur', 
-      dueDate: '2024-02-28',
-      currentSystemProgress: 40 
-    },
-  ];
+  // Mock Data (داخل useEffect للتحديث عند تغيير اللغة)
+  const [tasks, setTasks] = useState<Task[]>([]);
+
+  useEffect(() => {
+    setTasks([
+      { 
+        id: 'TSK-2024-101', 
+        title: lang === 'ar' ? 'تركيب العدادات الذكية - قطاع 4' : 'Smart Meter Installation - Sector 4', 
+        project: lang === 'ar' ? 'مشروع البنية التحتية للكهرباء' : 'Electrical Infrastructure Project', 
+        projectId: 'PRJ-ELEC-04',
+        location: 'Riyadh, Al-Malqa', 
+        dueDate: '2024-02-25',
+        currentSystemProgress: 65 
+      },
+      { 
+        id: 'TSK-2024-102', 
+        title: lang === 'ar' ? 'فحص جودة التمديدات الأرضية' : 'Underground Cabling QA Inspection', 
+        project: lang === 'ar' ? 'مشروع شبكات المياه' : 'Water Network Project', 
+        projectId: 'PRJ-WATER-09',
+        location: 'Jeddah, North Obhur', 
+        dueDate: '2024-02-28',
+        currentSystemProgress: 40 
+      },
+    ]);
+  }, [lang]);
 
   // --- Handlers ---
-  const toggleLang = () => setLang(prev => prev === 'ar' ? 'en' : 'ar');
-
   const handleAiValidation = () => {
     setIsAiAnalyzing(true);
     setAiInsight(null);
@@ -111,9 +118,8 @@ export default function EnterpriseFieldUpdatePage() {
               </span>
             </p>
           </div>
-          <button onClick={toggleLang} className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-200 transition">
-             <Globe size={14} /> {lang === 'ar' ? 'English' : 'عربي'}
-          </button>
+          
+          {/* تم إزالة زر تبديل اللغة من هنا */}
         </div>
       </header>
 
@@ -300,7 +306,7 @@ export default function EnterpriseFieldUpdatePage() {
                             <div className="flex bg-slate-100 rounded-lg p-1">
                                 {['Low', 'Medium', 'High', 'Critical'].map((r) => (
                                     <button 
-                                        key={r}
+                                        key={r} 
                                         onClick={() => setRisk(r as RiskLevel)}
                                         className={`px-4 py-1.5 rounded-md text-[10px] font-bold transition ${
                                             risk === r 

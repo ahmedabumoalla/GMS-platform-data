@@ -3,9 +3,12 @@
 import { useState, useEffect } from 'react';
 import { 
   Users, Search, Filter, Phone, Mail, MoreHorizontal, 
-  Briefcase, Star, BrainCircuit, Globe, LayoutGrid, List,
-  ShieldCheck, AlertTriangle, Zap, CheckCircle2, Trophy
+  Briefcase, Star, BrainCircuit, LayoutGrid, List,
+  ShieldCheck, AlertTriangle, Zap, CheckCircle2, Trophy, Loader2
 } from 'lucide-react';
+
+// ✅ استيراد الكونتكست العام
+import { useDashboard } from '../../layout'; 
 
 // --- Types & Interfaces ---
 type AvailabilityStatus = 'Available' | 'Assigned' | 'Overloaded' | 'On Leave';
@@ -25,7 +28,9 @@ interface TeamMember {
 }
 
 export default function EnterpriseWorkforcePage() {
-  const [lang, setLang] = useState<'ar' | 'en'>('ar');
+  // ✅ استخدام اللغة من النظام العام
+  const { lang } = useDashboard();
+  
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [loading, setLoading] = useState(true);
@@ -34,6 +39,7 @@ export default function EnterpriseWorkforcePage() {
 
   // --- Mock Data ---
   useEffect(() => {
+    setLoading(true); // إعادة تفعيل اللودينج عند تغيير اللغة
     setTimeout(() => {
       setMembers([
         { 
@@ -71,11 +77,9 @@ export default function EnterpriseWorkforcePage() {
       ]);
       setLoading(false);
     }, 800);
-  }, [lang]);
+  }, [lang]); // ✅ التحديث عند تغيير اللغة
 
   // --- Handlers ---
-  const toggleLang = () => setLang(prev => prev === 'ar' ? 'en' : 'ar');
-
   const runAiOptimization = () => {
     setIsAiAnalyzing(true);
     setTimeout(() => {
@@ -103,9 +107,6 @@ export default function EnterpriseWorkforcePage() {
           </div>
           
           <div className="flex items-center gap-3">
-             <button onClick={toggleLang} className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-200 transition">
-               <Globe size={14} /> {lang === 'ar' ? 'English' : 'عربي'}
-             </button>
              <div className="h-8 w-px bg-slate-200 mx-1"></div>
              <button className="p-2 bg-slate-100 rounded-lg text-slate-600 hover:bg-slate-200" onClick={() => setViewMode('grid')}>
                 <LayoutGrid size={18} className={viewMode === 'grid' ? 'text-blue-600' : ''} />
@@ -113,11 +114,14 @@ export default function EnterpriseWorkforcePage() {
              <button className="p-2 bg-slate-100 rounded-lg text-slate-600 hover:bg-slate-200" onClick={() => setViewMode('list')}>
                 <List size={18} className={viewMode === 'list' ? 'text-blue-600' : ''} />
              </button>
+             
+             {/* زر التحليل الذكي */}
              <button 
                 onClick={runAiOptimization}
+                disabled={isAiAnalyzing}
                 className="bg-slate-900 text-white px-5 py-2.5 rounded-xl font-bold text-sm hover:bg-slate-800 shadow-lg shadow-slate-200 transition flex items-center gap-2"
              >
-                <BrainCircuit size={16} className={isAiAnalyzing ? 'animate-pulse' : ''} /> 
+                {isAiAnalyzing ? <Loader2 size={16} className="animate-spin"/> : <BrainCircuit size={16} />} 
                 {isAiAnalyzing ? (lang === 'ar' ? 'جاري التحليل...' : 'Analyzing...') : (lang === 'ar' ? 'تحليل التوزيع الذكي' : 'AI Optimization')}
              </button>
           </div>

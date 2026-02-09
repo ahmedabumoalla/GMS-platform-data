@@ -2,470 +2,277 @@
 
 import { useState, useEffect } from 'react';
 import { 
-  Box, Truck, Users, Hammer, Plus, Search, 
-  Filter, BrainCircuit, Globe, Wrench, 
-  CheckCircle2, Clock, History, ArrowRightLeft, LayoutGrid, List, X, Save, AlertTriangle, Calendar
+  Calendar, Clock, Flag, MapPin, ChevronLeft, ChevronRight, 
+  Filter, Search, ZoomIn, ZoomOut, AlertTriangle, CheckCircle, 
+  GitCommit, Layers, MoreHorizontal, BrainCircuit,
+  ArrowRight, ArrowLeft, BarChart3, Loader2
 } from 'lucide-react';
 
-// --- Types & Interfaces ---
-type ResourceType = 'Equipment' | 'Vehicle' | 'Manpower' | 'Material';
-type ResourceStatus = 'Available' | 'In Use' | 'Maintenance' | 'Reserved';
+// ✅ استيراد الكونتكست العام
+import { useDashboard } from '../../layout'; 
 
-interface Resource {
+// --- Types ---
+type EventStatus = 'On Track' | 'At Risk' | 'Delayed' | 'Critical' | 'Completed';
+type EventType = 'Milestone' | 'Task' | 'Meeting' | 'Review' | 'Delivery';
+type Priority = 'High' | 'Medium' | 'Low';
+
+interface TimelineEvent {
   id: string;
-  name: string;
-  code: string;
-  type: ResourceType;
-  status: ResourceStatus;
-  assignedTo: string;
-  location: string;
-  utilization: number;
-  lastMaintenance: string;
-  nextMaintenance: string;
+  date: string;
+  time?: string;
+  title: string;
+  project: string;
+  client: string;
+  type: EventType;
+  status: EventStatus;
+  priority: Priority;
+  description: string;
+  assignedTo?: string;
+  isCriticalPath?: boolean;
 }
 
-export default function EnterpriseResourcesPage() {
-  const [lang, setLang] = useState<'ar' | 'en'>('ar');
-  const [activeTab, setActiveTab] = useState<ResourceType | 'All'>('All');
-  const [resources, setResources] = useState<Resource[]>([]);
+export default function EnterpriseTimelinePage() {
+  // ✅ استخدام اللغة من النظام العام
+  const { lang } = useDashboard();
+  
+  const [selectedView, setSelectedView] = useState<'Vertical' | 'Gantt'>('Vertical');
+  const [currentDate, setCurrentDate] = useState(new Date());
+  const [events, setEvents] = useState<TimelineEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [isAiAnalyzing, setIsAiAnalyzing] = useState(false);
   const [aiInsight, setAiInsight] = useState<string | null>(null);
 
-  // --- حالات النوافذ المنبثقة (Modals) ---
-  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  
-  const [actionModal, setActionModal] = useState<{
-    isOpen: boolean;
-    type: 'assign' | 'maintenance' | 'history' | null;
-    resource: Resource | null;
-  }>({ isOpen: false, type: null, resource: null });
-
-  // حالة لتخزين مدخلات نافذة الإجراءات (التخصيص والصيانة)
-  const [actionFormData, setActionFormData] = useState({
-    assignProject: '',
-    maintenanceType: 'Routine', // Routine | Repair
-    notes: ''
-  });
-
-  // بيانات المورد الجديد للإضافة
-  const [newResource, setNewResource] = useState<{ name: string; code: string; type: ResourceType }>({ name: '', code: '', type: 'Equipment' });
-
   // --- Mock Data ---
   useEffect(() => {
+    setLoading(true); // إعادة تفعيل اللودينج عند تغيير اللغة
     setTimeout(() => {
-      setResources([
+      setEvents([
         { 
-          id: '1', name: lang === 'ar' ? 'حفار كاتربيلر CAT-320' : 'Caterpillar Excavator CAT-320', 
-          code: 'EQ-204', type: 'Equipment', status: 'In Use', 
-          assignedTo: lang === 'ar' ? 'مشروع الورود' : 'Al-Wurud Project', location: 'Zone A',
-          utilization: 85, lastMaintenance: '2023-12-15', nextMaintenance: '2024-03-15'
+          id: 'EVT-001', date: '2024-02-05', time: '09:00 AM', 
+          title: lang === 'ar' ? 'تسليم الموقع - مشروع الورود' : 'Site Handover - Al-Wurud', 
+          project: lang === 'ar' ? 'تطوير البنية التحتية' : 'Infrastructure Dev', 
+          client: 'MOMRA', type: 'Milestone', status: 'Completed', priority: 'High', 
+          description: lang === 'ar' ? 'استلام الموقع من الأمانة وبدء التجهيزات.' : 'Site handover from municipality and setup start.',
+          assignedTo: 'Eng. Ahmed', isCriticalPath: true
         },
         { 
-          id: '2', name: lang === 'ar' ? 'رافعة شوكية تويوتا' : 'Toyota Forklift', 
-          code: 'EQ-105', type: 'Equipment', status: 'Available', 
-          assignedTo: '-', location: 'Warehouse 1',
-          utilization: 10, lastMaintenance: '2024-01-10', nextMaintenance: '2024-04-10'
+          id: 'EVT-002', date: '2024-02-10', time: '10:30 AM', 
+          title: lang === 'ar' ? 'اجتماع المراجعة الأسبوعي' : 'Weekly Review Meeting', 
+          project: lang === 'ar' ? 'صيانة الشبكات' : 'Network Maintenance', 
+          client: 'SEC', type: 'Meeting', status: 'On Track', priority: 'Medium', 
+          description: lang === 'ar' ? 'مناقشة تقارير الأداء مع الاستشاري.' : 'Discuss performance reports with consultant.' 
         },
         { 
-          id: '3', name: lang === 'ar' ? 'تويوتا هايلكس 2023' : 'Toyota Hilux 2023', 
-          code: 'VH-990', type: 'Vehicle', status: 'Maintenance', 
-          assignedTo: lang === 'ar' ? 'فريق الصيانة' : 'Maintenance Team', location: 'Workshop',
-          utilization: 92, lastMaintenance: '2023-11-20', nextMaintenance: 'Urgent'
+          id: 'EVT-003', date: '2024-02-15', 
+          title: lang === 'ar' ? 'انتهاء مرحلة الحفر - القطاع 3' : 'Excavation End - Sector 3', 
+          project: lang === 'ar' ? 'تطوير البنية التحتية' : 'Infrastructure Dev', 
+          client: 'MOMRA', type: 'Task', status: 'At Risk', priority: 'High', 
+          description: lang === 'ar' ? 'الموعد النهائي لإنهاء أعمال الحفر وتمديد الأنابيب.' : 'Deadline for excavation and pipe laying.',
+          isCriticalPath: true
         },
         { 
-          id: '4', name: lang === 'ar' ? 'مولد كهرباء احتياطي' : 'Backup Generator', 
-          code: 'EQ-002', type: 'Equipment', status: 'Reserved', 
-          assignedTo: lang === 'ar' ? 'مشروع الطوارئ' : 'Emergency Ops', location: 'Zone C',
-          utilization: 0, lastMaintenance: '2024-02-01', nextMaintenance: '2024-08-01'
-        },
-        { 
-          id: '5', name: lang === 'ar' ? 'سعيد القحطاني - فني أول' : 'Saeed Al-Qahtani - Sr Tech', 
-          code: 'EMP-101', type: 'Manpower', status: 'In Use', 
-          assignedTo: lang === 'ar' ? 'مشروع الورود' : 'Al-Wurud Project', location: 'Site',
-          utilization: 98, lastMaintenance: '-', nextMaintenance: '-'
+          id: 'EVT-004', date: '2024-02-20', 
+          title: lang === 'ar' ? 'اختبارات التشغيل الأولي' : 'Initial Operation Tests', 
+          project: lang === 'ar' ? 'محطة الضخ 4' : 'Pump Station 4', 
+          client: 'NWC', type: 'Review', status: 'Delayed', priority: 'High', 
+          description: lang === 'ar' ? 'بدء اختبارات الضغط للشبكة الجديدة.' : 'Start pressure tests for new network.',
+          assignedTo: 'Eng. Sarah'
         },
       ]);
       setLoading(false);
     }, 800);
-  }, [lang]);
+  }, [lang]); // ✅ التحديث عند تغيير اللغة
 
-  // --- Handlers ---
-  const toggleLang = () => setLang(prev => prev === 'ar' ? 'en' : 'ar');
-
-  const runAiOptimization = () => {
+  // --- Logic ---
+  const runAiAnalysis = () => {
     setIsAiAnalyzing(true);
     setTimeout(() => {
       setIsAiAnalyzing(false);
       setAiInsight(lang === 'ar' 
-        ? 'تحليل الموارد: تم اكتشاف استخدام مفرط للمركبة VH-990 مما يستدعي صيانة مبكرة. يُنصح بإعادة توجيه مركبة بديلة من المستودع لتجنب التوقف.' 
-        : 'Resource Analysis: Over-utilization detected for VH-990 requiring early maintenance. Suggest reallocating spare vehicle from warehouse to prevent downtime.');
+        ? 'تحليل الجدول: يوجد تضارب محتمل في الموارد بتاريخ 15 فبراير بين مشروعين حرجين. يُنصح بإعادة جدولة "اجتماع المراجعة" لتخفيف الضغط.' 
+        : 'Schedule Analysis: Potential resource conflict detected on Feb 15 between two critical projects. Suggest rescheduling "Review Meeting" to alleviate load.');
     }, 2000);
   };
 
-  const handleAddResource = () => {
-    if (!newResource.name || !newResource.code) return;
-    const newRes: Resource = {
-        id: Math.random().toString(36).substr(2, 9),
-        name: newResource.name,
-        code: newResource.code,
-        type: newResource.type,
-        status: 'Available',
-        assignedTo: '-',
-        location: 'Main Warehouse',
-        utilization: 0,
-        lastMaintenance: '-',
-        nextMaintenance: '-'
-    };
-    setResources([newRes, ...resources]);
-    setIsAddModalOpen(false);
-    setNewResource({ name: '', code: '', type: 'Equipment' });
-  };
-
-  // فتح نافذة الإجراء وتهيئة البيانات
-  const openActionModal = (type: 'assign' | 'maintenance' | 'history', resource: Resource) => {
-    // تعيين القيم الافتراضية عند الفتح
-    setActionFormData({
-        assignProject: lang === 'ar' ? 'مشروع الورود' : 'Al-Wurud Project',
-        maintenanceType: 'Routine',
-        notes: ''
-    });
-    setActionModal({ isOpen: true, type, resource });
-  };
-
-  // تنفيذ الإجراء وتحديث الحالة
-  const executeAction = () => {
-    if (!actionModal.resource) return;
-
-    let updatedStatus = actionModal.resource.status;
-    let updatedAssign = actionModal.resource.assignedTo;
-    let updatedMaintenance = actionModal.resource.nextMaintenance;
-
-    if (actionModal.type === 'assign') {
-        updatedStatus = 'In Use';
-        updatedAssign = actionFormData.assignProject; // استخدام المشروع المختار
-    } else if (actionModal.type === 'maintenance') {
-        updatedStatus = 'Maintenance';
-        // تحديث النص بناءً على نوع الصيانة المختار
-        updatedAssign = actionFormData.maintenanceType === 'Routine' 
-            ? (lang === 'ar' ? 'صيانة دورية' : 'Routine Maint.')
-            : (lang === 'ar' ? 'إصلاح عطل' : 'Repair');
-        updatedMaintenance = lang === 'ar' ? 'جاري العمل' : 'In Progress';
+  const getStatusColor = (status: EventStatus) => {
+    switch (status) {
+      case 'On Track': return 'bg-blue-100 text-blue-700 border-blue-200';
+      case 'At Risk': return 'bg-amber-100 text-amber-700 border-amber-200';
+      case 'Delayed': return 'bg-red-100 text-red-700 border-red-200';
+      case 'Critical': return 'bg-purple-100 text-purple-700 border-purple-200';
+      case 'Completed': return 'bg-green-100 text-green-700 border-green-200';
+      default: return 'bg-slate-100 text-slate-600 border-slate-200';
     }
-
-    setResources(resources.map(r => r.id === actionModal.resource?.id ? { 
-        ...r, 
-        status: updatedStatus, 
-        assignedTo: updatedAssign,
-        nextMaintenance: updatedMaintenance
-    } : r));
-
-    setActionModal({ isOpen: false, type: null, resource: null });
   };
 
-  const filteredResources = resources.filter(r => activeTab === 'All' ? true : r.type === activeTab);
+  const getTypeIcon = (type: EventType) => {
+    switch (type) {
+        case 'Milestone': return <Flag size={16} />;
+        case 'Meeting': return <UsersIcon size={16} />;
+        case 'Task': return <GitCommit size={16} />;
+        case 'Review': return <Search size={16} />;
+        default: return <Clock size={16} />;
+    }
+  };
 
   return (
     <div className={`min-h-screen bg-slate-50 font-sans text-slate-800 ${lang === 'ar' ? 'dir-rtl' : 'dir-ltr'}`} dir={lang === 'ar' ? 'rtl' : 'ltr'}>
       
-      {/* Header */}
+      {/* --- Section 1: Timeline Control Header --- */}
       <div className="bg-white border-b border-slate-200 px-6 py-5 sticky top-0 z-20 shadow-sm">
         <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-6">
           <div>
             <h1 className="text-2xl font-black text-slate-900 flex items-center gap-2">
-              <Box className="text-blue-600" />
-              {lang === 'ar' ? 'إدارة وتخصيص الموارد' : 'Enterprise Resource Management'}
+              <Calendar className="text-blue-600" />
+              {lang === 'ar' ? 'تنسيق الجدول الزمني للمشاريع' : 'Project Timeline Orchestration'}
             </h1>
             <p className="text-sm text-slate-500 font-medium mt-1">
-              {lang === 'ar' ? 'تتبع المعدات، المركبات، والقوى العاملة وتخصيصها للمشاريع' : 'Track, allocate, and optimize equipment, vehicles, and manpower'}
+              {lang === 'ar' ? 'إدارة المواعيد النهائية، المسارات الحرجة، ومخاطر التأخير' : 'Manage deadlines, critical paths, and delay risks'}
             </p>
           </div>
+          
           <div className="flex items-center gap-3">
-             <button onClick={toggleLang} className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-200 transition">
-               <Globe size={14} /> {lang === 'ar' ? 'English' : 'عربي'}
-             </button>
              <div className="h-8 w-px bg-slate-200 mx-1"></div>
-             <button onClick={() => setIsAddModalOpen(true)} className="bg-slate-900 text-white px-5 py-2.5 rounded-xl font-bold text-sm hover:bg-slate-800 shadow-lg shadow-slate-200 transition flex items-center gap-2">
-                <Plus size={16} /> {lang === 'ar' ? 'إضافة مورد' : 'Add Resource'}
+             
+             {/* Date Navigation */}
+             <div className="flex items-center bg-slate-50 rounded-xl border border-slate-200 p-1">
+                <button className="p-1.5 hover:bg-white rounded-lg transition shadow-sm"><ChevronRight size={18} /></button>
+                <span className="px-4 text-sm font-bold text-slate-700 w-32 text-center">
+                    {currentDate.toLocaleDateString(lang === 'ar' ? 'ar-SA' : 'en-US', { month: 'long', year: 'numeric' })}
+                </span>
+                <button className="p-1.5 hover:bg-white rounded-lg transition shadow-sm"><ChevronLeft size={18} /></button>
+             </div>
+
+             {/* زر التحليل الذكي */}
+             <button 
+                onClick={runAiAnalysis}
+                className="bg-slate-900 text-white px-5 py-2.5 rounded-xl font-bold text-sm hover:bg-slate-800 shadow-lg shadow-slate-200 transition flex items-center gap-2"
+             >
+                {isAiAnalyzing ? <Loader2 size={16} className="animate-spin" /> : <BrainCircuit size={16} className={isAiAnalyzing ? 'animate-pulse' : ''} />}
+                {isAiAnalyzing ? (lang === 'ar' ? 'جاري التحليل...' : 'Analyzing...') : (lang === 'ar' ? 'كشف التعارضات الذكي' : 'AI Conflict Detection')}
              </button>
           </div>
         </div>
 
-        {/* Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-            <StatCard label={lang === 'ar' ? 'المعدات الثقيلة' : 'Heavy Equipment'} value="45" total="50" color="blue" icon={Hammer} />
-            <StatCard label={lang === 'ar' ? 'أسطول المركبات' : 'Fleet Vehicles'} value="12" total="15" color="purple" icon={Truck} />
-            <StatCard label={lang === 'ar' ? 'القوى العاملة' : 'Manpower'} value="86" total="90" color="emerald" icon={Users} />
-            <StatCard label={lang === 'ar' ? 'تحت الصيانة' : 'Under Maint.'} value="3" total="Critical" color="amber" icon={Wrench} />
-        </div>
-
-        {/* Filters */}
-        <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-            <div className="flex bg-slate-100 p-1 rounded-xl w-full md:w-auto overflow-x-auto">
-                {['All', 'Equipment', 'Vehicle', 'Manpower', 'Material'].map((tab) => (
-                    <button key={tab} onClick={() => setActiveTab(tab as any)} className={`px-4 py-2 rounded-lg text-xs font-bold transition whitespace-nowrap ${activeTab === tab ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
-                        {tab === 'All' ? (lang === 'ar' ? 'الكل' : 'All') : tab}
-                    </button>
-                ))}
+        {/* Controls & Filters */}
+        <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex gap-2">
+                <ViewToggle label={lang === 'ar' ? 'قائمة زمنية' : 'Vertical'} active={selectedView === 'Vertical'} onClick={() => setSelectedView('Vertical')} />
+                <ViewToggle label={lang === 'ar' ? 'مخطط جانت' : 'Gantt'} active={selectedView === 'Gantt'} onClick={() => setSelectedView('Gantt')} />
+                <ViewToggle label={lang === 'ar' ? 'المسار الحرج' : 'Critical Path'} active={false} onClick={() => {}} />
             </div>
-            <div className="flex gap-2 w-full md:w-auto">
-                <div className="relative flex-1 md:w-64">
+            
+            <div className="flex gap-2">
+                <div className="relative">
                     <Search className="absolute right-3 top-2.5 text-slate-400 w-4 h-4" />
-                    <input type="text" placeholder={lang === 'ar' ? 'بحث بالكود أو الاسم...' : 'Search code, name...'} className="w-full bg-slate-50 border border-slate-200 rounded-xl pr-10 pl-4 py-2 text-sm outline-none focus:border-blue-500 transition" />
+                    <input type="text" placeholder={lang === 'ar' ? 'بحث...' : 'Search...'} className="pl-10 pr-10 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-blue-500 w-48" />
                 </div>
-                <button onClick={runAiOptimization} className="p-2 bg-purple-50 border border-purple-100 text-purple-600 rounded-xl hover:bg-purple-100 transition" title="AI Optimization">
-                    <BrainCircuit size={18} className={isAiAnalyzing ? 'animate-pulse' : ''} />
+                <button className="p-2 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 text-slate-500">
+                    <Filter size={18} />
+                </button>
+                <button className="p-2 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 text-slate-500">
+                    <ZoomIn size={18} />
                 </button>
             </div>
         </div>
 
-        {/* AI Insight */}
+        {/* AI Insight Box */}
         {aiInsight && (
-            <div className="mt-4 bg-gradient-to-r from-purple-50 to-indigo-50 p-4 rounded-xl border border-purple-100 flex items-start gap-3 animate-in slide-in-from-top-2">
-                <div className="p-2 bg-white rounded-lg text-purple-600 shadow-sm"><BrainCircuit size={18}/></div>
+            <div className="mt-4 bg-gradient-to-r from-amber-50 to-orange-50 p-4 rounded-xl border border-amber-100 flex items-start gap-3 animate-in slide-in-from-top-2">
+                <div className="p-2 bg-white rounded-lg text-amber-600 shadow-sm"><AlertTriangle size={18}/></div>
                 <p className="text-sm text-slate-700 font-medium leading-relaxed mt-1">{aiInsight}</p>
+                <button onClick={() => setAiInsight(null)} className="mr-auto text-slate-400 hover:text-slate-600">
+                    {lang === 'ar' ? <ArrowLeft size={16}/> : <ArrowRight size={16}/>}
+                </button>
             </div>
         )}
       </div>
 
-      {/* Table */}
-      <div className="p-6">
+      {/* --- Section 2: Timeline Content (Vertical View) --- */}
+      <div className="p-6 relative">
         {loading ? (
-            <div className="text-center py-20 text-slate-400 animate-pulse">{lang === 'ar' ? 'جاري تحميل سجل الموارد...' : 'Loading resource registry...'}</div>
+            <div className="text-center py-20 text-slate-400 animate-pulse">{lang === 'ar' ? 'جاري تحميل الجدول الزمني...' : 'Loading timeline...'}</div>
         ) : (
-            <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
-                <table className="w-full text-left rtl:text-right">
-                    <thead className="bg-slate-50 text-slate-500 text-xs font-bold border-b border-slate-200 uppercase tracking-wider">
-                        <tr>
-                            <th className="p-5">{lang === 'ar' ? 'المورد & الكود' : 'Resource & Code'}</th>
-                            <th className="p-5">{lang === 'ar' ? 'الحالة' : 'Status'}</th>
-                            <th className="p-5">{lang === 'ar' ? 'المشروع / الموقع' : 'Project / Location'}</th>
-                            <th className="p-5">{lang === 'ar' ? 'الاستخدام' : 'Utilization'}</th>
-                            <th className="p-5">{lang === 'ar' ? 'الصيانة القادمة' : 'Next Maint.'}</th>
-                            <th className="p-5 text-end">{lang === 'ar' ? 'إجراءات' : 'Actions'}</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                        {filteredResources.map((res) => (
-                            <tr key={res.id} className="hover:bg-slate-50 transition group">
-                                <td className="p-5">
-                                    <div className="flex items-center gap-3">
-                                        <div className="p-2.5 bg-slate-100 rounded-xl text-slate-600 border border-slate-200">{getResourceIcon(res.type)}</div>
-                                        <div>
-                                            <div className="font-bold text-slate-800 text-sm">{res.name}</div>
-                                            <div className="text-xs text-slate-400 font-mono mt-0.5 bg-slate-100 px-1.5 rounded inline-block">{res.code}</div>
-                                        </div>
-                                    </div>
-                                </td>
-                                <td className="p-5"><StatusBadge status={res.status} lang={lang} /></td>
-                                <td className="p-5">
-                                    <div className="text-sm font-bold text-slate-700">{res.assignedTo}</div>
-                                    <div className="text-xs text-slate-400 flex items-center gap-1 mt-1"><MapPinIcon size={10} /> {res.location}</div>
-                                </td>
-                                <td className="p-5 w-48">
-                                    <div className="flex justify-between text-xs mb-1"><span className="font-bold text-slate-600">{res.utilization}%</span></div>
-                                    <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
-                                        <div className={`h-full rounded-full ${getUtilizationColor(res.utilization)}`} style={{ width: `${res.utilization}%` }}></div>
-                                    </div>
-                                </td>
-                                <td className="p-5">
-                                    <div className={`text-sm font-bold ${res.nextMaintenance === 'Urgent' ? 'text-red-600' : 'text-slate-600'}`}>{res.nextMaintenance}</div>
-                                    <div className="text-xs text-slate-400 mt-1">{lang === 'ar' ? 'آخر صيانة:' : 'Last:'} {res.lastMaintenance}</div>
-                                </td>
-                                <td className="p-5 text-end">
-                                    <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                        {/* زر التخصيص */}
-                                        <button 
-                                            onClick={() => openActionModal('assign', res)}
-                                            className="p-2 bg-white border border-slate-200 rounded-lg text-slate-500 hover:text-blue-600 hover:border-blue-300 transition" 
-                                            title={lang === 'ar' ? 'تخصيص لمشروع' : 'Assign'}
-                                        >
-                                            <ArrowRightLeft size={16} />
-                                        </button>
-                                        {/* زر الصيانة */}
-                                        <button 
-                                            onClick={() => openActionModal('maintenance', res)}
-                                            className="p-2 bg-white border border-slate-200 rounded-lg text-slate-500 hover:text-amber-600 hover:border-amber-300 transition" 
-                                            title={lang === 'ar' ? 'تسجيل صيانة' : 'Maintenance'}
-                                        >
-                                            <Wrench size={16} />
-                                        </button>
-                                        {/* زر السجل */}
-                                        <button 
-                                            onClick={() => openActionModal('history', res)}
-                                            className="p-2 bg-white border border-slate-200 rounded-lg text-slate-500 hover:text-slate-800 hover:border-slate-400 transition" 
-                                            title={lang === 'ar' ? 'عرض السجل' : 'History'}
-                                        >
-                                            <History size={16} />
-                                        </button>
-                                    </div>
-                                </td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-            </div>
-        )}
-      </div>
+            <div className="max-w-5xl mx-auto">
+                {/* Vertical Line */}
+                <div className={`absolute top-6 bottom-6 w-0.5 bg-slate-200 ${lang === 'ar' ? 'right-12' : 'left-12'}`}></div>
 
-      {/* --- Action Modal (نافذة الإجراءات الموحدة) --- */}
-      {actionModal.isOpen && actionModal.resource && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in zoom-in duration-200">
-            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden">
-                <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-                    <h3 className="font-bold text-lg text-slate-800">
-                        {actionModal.type === 'assign' && (lang === 'ar' ? 'تخصيص المورد' : 'Assign Resource')}
-                        {actionModal.type === 'maintenance' && (lang === 'ar' ? 'تسجيل صيانة' : 'Log Maintenance')}
-                        {actionModal.type === 'history' && (lang === 'ar' ? 'سجل المورد' : 'Resource History')}
-                    </h3>
-                    <button onClick={() => setActionModal({ ...actionModal, isOpen: false })} className="p-2 hover:bg-slate-100 text-slate-400 rounded-lg"><X size={20} /></button>
-                </div>
-                
-                <div className="p-6 space-y-4">
-                    {/* معلومات المورد */}
-                    <div className="flex items-center gap-3 bg-slate-50 p-3 rounded-xl border border-slate-100">
-                        <div className="p-2 bg-white rounded-lg border border-slate-200">{getResourceIcon(actionModal.resource.type)}</div>
-                        <div>
-                            <div className="font-bold text-slate-800">{actionModal.resource.name}</div>
-                            <div className="text-xs text-slate-500 font-mono">{actionModal.resource.code}</div>
-                        </div>
-                    </div>
-
-                    {/* خيارات التخصيص */}
-                    {actionModal.type === 'assign' && (
-                        <div>
-                            <label className="text-xs font-bold text-slate-500 mb-2 block">{lang === 'ar' ? 'تعيين إلى مشروع' : 'Assign to Project'}</label>
-                            <select 
-                                className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-bold outline-none focus:border-blue-500"
-                                value={actionFormData.assignProject}
-                                onChange={(e) => setActionFormData({...actionFormData, assignProject: e.target.value})}
-                            >
-                                <option>{lang === 'ar' ? 'مشروع الورود' : 'Al-Wurud Project'}</option>
-                                <option>{lang === 'ar' ? 'مشروع صيانة الشبكات' : 'Network Maintenance'}</option>
-                                <option>{lang === 'ar' ? 'مشروع الطوارئ' : 'Emergency Project'}</option>
-                            </select>
-                        </div>
-                    )}
-
-                    {/* خيارات الصيانة (تم الإصلاح هنا) */}
-                    {actionModal.type === 'maintenance' && (
-                        <div>
-                            <label className="text-xs font-bold text-slate-500 mb-2 block">{lang === 'ar' ? 'نوع الصيانة' : 'Maintenance Type'}</label>
-                            <div className="flex gap-2 mb-3">
-                                <button 
-                                    onClick={() => setActionFormData({...actionFormData, maintenanceType: 'Routine'})}
-                                    className={`flex-1 py-2 rounded-lg text-xs font-bold border transition ${
-                                        actionFormData.maintenanceType === 'Routine' 
-                                        ? 'border-blue-500 bg-blue-50 text-blue-700 shadow-sm' 
-                                        : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50'
-                                    }`}
-                                >
-                                    {lang === 'ar' ? 'دورية' : 'Routine'}
-                                </button>
-                                <button 
-                                    onClick={() => setActionFormData({...actionFormData, maintenanceType: 'Repair'})}
-                                    className={`flex-1 py-2 rounded-lg text-xs font-bold border transition ${
-                                        actionFormData.maintenanceType === 'Repair' 
-                                        ? 'border-red-500 bg-red-50 text-red-700 shadow-sm' 
-                                        : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50'
-                                    }`}
-                                >
-                                    {lang === 'ar' ? 'إصلاح عطل' : 'Repair'}
-                                </button>
+                <div className="space-y-8">
+                    {events.map((event) => (
+                        <div key={event.id} className="relative flex items-start gap-6 group">
+                            
+                            {/* Timeline Node */}
+                            <div className={`relative z-10 w-12 h-12 rounded-2xl border-4 border-slate-50 shadow-md flex items-center justify-center shrink-0 transition-transform group-hover:scale-110 
+                                ${event.isCriticalPath ? 'bg-red-500 text-white' : 'bg-white text-slate-500'}`}>
+                                {getTypeIcon(event.type)}
                             </div>
-                            <textarea 
-                                className="w-full h-24 bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm outline-none resize-none focus:border-blue-500 transition" 
-                                placeholder={lang === 'ar' ? 'ملاحظات الصيانة...' : 'Maintenance notes...'}
-                                value={actionFormData.notes}
-                                onChange={(e) => setActionFormData({...actionFormData, notes: e.target.value})}
-                            ></textarea>
-                        </div>
-                    )}
 
-                    {/* سجل التاريخ */}
-                    {actionModal.type === 'history' && (
-                        <div className="space-y-3 max-h-48 overflow-y-auto pr-2">
-                            {[1, 2, 3].map((i) => (
-                                <div key={i} className="flex gap-3 text-sm border-l-2 border-slate-200 pl-3 py-1 relative">
-                                    <div className="absolute -left-[5px] top-2 w-2 h-2 rounded-full bg-slate-300"></div>
-                                    <div className="flex-1">
-                                        <div className="font-bold text-slate-700">{lang === 'ar' ? 'نقل إلى الموقع' : 'Moved to Site'}</div>
-                                        <div className="text-xs text-slate-400">2024-02-0{i} • By Ahmed</div>
+                            {/* Event Card */}
+                            <div className={`flex-1 bg-white p-5 rounded-2xl border transition-all duration-300 relative overflow-hidden group-hover:shadow-lg group-hover:-translate-y-1
+                                ${event.isCriticalPath ? 'border-red-200 shadow-red-50' : 'border-slate-200 shadow-sm'}
+                            `}>
+                                {/* Critical Path Stripe */}
+                                {event.isCriticalPath && <div className="absolute top-0 left-0 right-0 h-1 bg-red-500"></div>}
+
+                                <div className="flex justify-between items-start mb-3">
+                                    <div>
+                                        <div className="flex items-center gap-2 mb-1">
+                                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${getStatusColor(event.status)}`}>
+                                                {event.status}
+                                            </span>
+                                            {event.isCriticalPath && (
+                                                <span className="text-[10px] font-bold text-red-600 flex items-center gap-1 bg-red-50 px-2 py-0.5 rounded border border-red-100">
+                                                    <AlertTriangle size={10} /> {lang === 'ar' ? 'مسار حرج' : 'Critical Path'}
+                                                </span>
+                                            )}
+                                        </div>
+                                        <h3 className="font-bold text-slate-800 text-lg">{event.title}</h3>
+                                    </div>
+                                    <div className="text-right">
+                                        <div className="text-sm font-bold text-slate-700">{event.date}</div>
+                                        {event.time && <div className="text-xs text-slate-400 font-mono">{event.time}</div>}
                                     </div>
                                 </div>
-                            ))}
-                        </div>
-                    )}
-                </div>
 
-                {/* أزرار الحفظ والإلغاء */}
-                {actionModal.type !== 'history' && (
-                    <div className="p-5 border-t border-slate-100 bg-slate-50/50 flex gap-3">
-                        <button onClick={() => setActionModal({ ...actionModal, isOpen: false })} className="flex-1 py-2.5 bg-white border border-slate-300 text-slate-600 rounded-xl font-bold text-sm hover:bg-slate-100">
-                            {lang === 'ar' ? 'إلغاء' : 'Cancel'}
-                        </button>
-                        <button onClick={executeAction} className="flex-1 py-2.5 bg-slate-900 text-white rounded-xl font-bold text-sm hover:bg-slate-800 shadow-lg shadow-slate-200">
-                            {lang === 'ar' ? 'تأكيد' : 'Confirm'}
-                        </button>
-                    </div>
-                )}
-            </div>
-        </div>
-      )}
+                                <p className="text-sm text-slate-500 leading-relaxed mb-4">{event.description}</p>
 
-      {/* --- Add Resource Modal (نافذة الإضافة) --- */}
-      {isAddModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in zoom-in duration-200">
-            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden">
-                <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-                    <h3 className="font-bold text-lg text-slate-800">{lang === 'ar' ? 'إضافة مورد جديد' : 'Add New Resource'}</h3>
-                    <button onClick={() => setIsAddModalOpen(false)} className="p-2 hover:bg-red-50 text-slate-400 hover:text-red-500 rounded-lg transition"><X size={20} /></button>
-                </div>
-                <div className="p-6 space-y-4">
-                    <div>
-                        <label className="text-xs font-bold text-slate-500 mb-1.5 block">{lang === 'ar' ? 'اسم المورد' : 'Resource Name'}</label>
-                        <input type="text" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 outline-none focus:border-blue-500 text-sm font-bold" value={newResource.name} onChange={(e) => setNewResource({...newResource, name: e.target.value})} placeholder={lang === 'ar' ? 'مثال: حفار، سيارة...' : 'e.g. Excavator...'} />
-                    </div>
-                    <div>
-                        <label className="text-xs font-bold text-slate-500 mb-1.5 block">{lang === 'ar' ? 'كود المورد' : 'Resource Code'}</label>
-                        <input type="text" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 outline-none focus:border-blue-500 text-sm font-mono" value={newResource.code} onChange={(e) => setNewResource({...newResource, code: e.target.value})} placeholder="EQ-000" />
-                    </div>
-                    <div>
-                        <label className="text-xs font-bold text-slate-500 mb-1.5 block">{lang === 'ar' ? 'النوع' : 'Type'}</label>
-                        <div className="grid grid-cols-2 gap-2">
-                            {['Equipment', 'Vehicle', 'Manpower', 'Material'].map((type) => (
-                                <button key={type} onClick={() => setNewResource({...newResource, type: type as ResourceType})} className={`py-2 rounded-lg text-xs font-bold border ${newResource.type === type ? 'bg-blue-50 border-blue-500 text-blue-700' : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'}`}>{type}</button>
-                            ))}
+                                <div className="flex items-center justify-between pt-4 border-t border-slate-50">
+                                    <div className="flex items-center gap-4 text-xs text-slate-500">
+                                        <span className="flex items-center gap-1 font-medium bg-slate-50 px-2 py-1 rounded"><BriefcaseIcon size={12}/> {event.project}</span>
+                                        {event.assignedTo && <span className="flex items-center gap-1 font-medium bg-slate-50 px-2 py-1 rounded"><UsersIcon size={12}/> {event.assignedTo}</span>}
+                                    </div>
+                                    <button className="text-slate-400 hover:text-blue-600 transition">
+                                        <MoreHorizontal size={18}/>
+                                    </button>
+                                </div>
+                            </div>
                         </div>
-                    </div>
-                </div>
-                <div className="p-5 border-t border-slate-100 bg-slate-50/50 flex gap-3">
-                    <button onClick={() => setIsAddModalOpen(false)} className="flex-1 py-2.5 bg-white border border-slate-300 text-slate-600 rounded-xl font-bold text-sm hover:bg-slate-100">{lang === 'ar' ? 'إلغاء' : 'Cancel'}</button>
-                    <button onClick={handleAddResource} className="flex-1 py-2.5 bg-slate-900 text-white rounded-xl font-bold text-sm hover:bg-slate-800 shadow-lg shadow-slate-200 flex items-center justify-center gap-2"><Save size={16} /> {lang === 'ar' ? 'حفظ' : 'Save'}</button>
+                    ))}
                 </div>
             </div>
-        </div>
-      )}
+        )}
+      </div>
 
     </div>
   );
 }
 
-// ... Helper Functions (StatCard, StatusBadge, etc.) - Same as before
-function StatCard({ label, value, total, color, icon: Icon }: any) {
-    const colors: any = { blue: 'bg-blue-50 text-blue-600', purple: 'bg-purple-50 text-purple-600', emerald: 'bg-emerald-50 text-emerald-600', amber: 'bg-amber-50 text-amber-600' };
+// --- Helper Components ---
+
+function ViewToggle({ label, active, onClick }: any) {
     return (
-        <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex items-center justify-between">
-            <div><div className="flex items-baseline gap-1"><span className="text-2xl font-black text-slate-800">{value}</span><span className="text-xs text-slate-400 font-bold">/ {total}</span></div><div className="text-xs font-bold text-slate-400">{label}</div></div>
-            <div className={`p-3 rounded-xl ${colors[color]}`}><Icon size={20} /></div>
-        </div>
+        <button 
+            onClick={onClick}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition border ${
+                active 
+                ? 'bg-slate-800 text-white border-slate-800' 
+                : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+            }`}
+        >
+            {label}
+        </button>
     );
 }
-function StatusBadge({ status, lang }: { status: ResourceStatus, lang: 'ar' | 'en' }) {
-    const styles = { 'Available': 'bg-emerald-100 text-emerald-700 border-emerald-200', 'In Use': 'bg-blue-100 text-blue-700 border-blue-200', 'Maintenance': 'bg-amber-100 text-amber-700 border-amber-200', 'Reserved': 'bg-purple-100 text-purple-700 border-purple-200' };
-    const labels = { 'Available': lang === 'ar' ? 'متاح' : 'Available', 'In Use': lang === 'ar' ? 'قيد الاستخدام' : 'In Use', 'Maintenance': lang === 'ar' ? 'صيانة' : 'Maintenance', 'Reserved': lang === 'ar' ? 'محجوز' : 'Reserved' };
-    return <span className={`px-2.5 py-1 rounded-lg text-xs font-bold border flex items-center gap-1.5 w-fit ${styles[status]}`}>{status === 'Available' && <CheckCircle2 size={12} />}{status === 'In Use' && <Clock size={12} />}{status === 'Maintenance' && <Wrench size={12} />}{status === 'Reserved' && <Clock size={12} />}{labels[status]}</span>;
-}
-function getResourceIcon(type: ResourceType) { switch (type) { case 'Equipment': return <Hammer size={18} />; case 'Vehicle': return <Truck size={18} />; case 'Manpower': return <Users size={18} />; case 'Material': return <Box size={18} />; default: return <Box size={18} />; } }
-function getUtilizationColor(val: number) { if (val > 90) return 'bg-red-500'; if (val > 70) return 'bg-blue-500'; return 'bg-emerald-500'; }
-function MapPinIcon({size}: {size: number}) { return <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg> }
+
+function UsersIcon({size}: {size: number}) { return <span style={{fontSize: size}}>👥</span> }
+function BriefcaseIcon({size}: {size: number}) { return <span style={{fontSize: size}}>💼</span> }

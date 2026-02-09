@@ -1,461 +1,515 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
+import { motion, AnimatePresence } from 'framer-motion';
 import { 
   ArrowLeft, ArrowRight, ShieldCheck, Zap, Users, 
   LayoutDashboard, Phone, HardHat, ChevronRight, ChevronLeft,
-  Globe, Activity, CheckCircle2, Factory, Server, Sun, Moon
+  Globe, Activity, CheckCircle2, Factory, Server, Sun, Moon,
+  Cpu, BarChart3, Lock, Briefcase, MapPin, ChevronDown
 } from 'lucide-react';
 
+// --- مكونات مساعدة ---
+
+const SpotlightCard = ({ children, className = "", isDark }: any) => {
+  const divRef = useRef<HTMLDivElement>(null);
+  const [position, setPosition] = useState({ x: 0, y: 0 });
+  const [opacity, setOpacity] = useState(0);
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!divRef.current) return;
+    const rect = divRef.current.getBoundingClientRect();
+    setPosition({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+  };
+
+  const handleFocus = () => setOpacity(1);
+  const handleBlur = () => setOpacity(0);
+  const handleMouseEnter = () => setOpacity(1);
+  const handleMouseLeave = () => setOpacity(0);
+
+  return (
+    <div
+      ref={divRef}
+      onMouseMove={handleMouseMove}
+      onFocus={handleFocus}
+      onBlur={handleBlur}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+      className={`relative overflow-hidden rounded-3xl border transition-colors duration-300 ${isDark ? 'border-slate-800 bg-slate-900/50' : 'border-slate-200 bg-white'} ${className}`}
+    >
+      <div
+        className="pointer-events-none absolute -inset-px opacity-0 transition duration-300"
+        style={{
+          opacity,
+          background: `radial-gradient(600px circle at ${position.x}px ${position.y}px, ${isDark ? 'rgba(59, 130, 246, 0.15)' : 'rgba(59, 130, 246, 0.08)'}, transparent 40%)`,
+        }}
+      />
+      <div className="relative h-full">{children}</div>
+    </div>
+  );
+};
+
+const FadeIn = ({ children, delay = 0 }: any) => (
+  <motion.div
+    initial={{ opacity: 0, y: 20 }}
+    whileInView={{ opacity: 1, y: 0 }}
+    viewport={{ once: true }}
+    transition={{ duration: 0.6, delay, ease: "easeOut" }}
+  >
+    {children}
+  </motion.div>
+);
+
 export default function Home() {
-  const [lang, setLang] = useState<'ar' | 'en'>('ar');
-  const [isDark, setIsDark] = useState(false); // حالة الثيم (false = فاتح، true = داكن)
+  const [lang, setLang] = useState<'ar' | 'en' | 'ur'>('ar');
+  const [isDark, setIsDark] = useState(false); 
+  const [scrolled, setScrolled] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  const [isLangOpen, setIsLangOpen] = useState(false); // حالة قائمة اللغة
 
-  const toggleLang = () => setLang(prev => prev === 'ar' ? 'en' : 'ar');
-  const toggleTheme = () => setIsDark(prev => !prev); // دالة التبديل
+  const toggleTheme = () => setIsDark(prev => !prev);
   
-  const isRTL = lang === 'ar';
-  
-  // Dynamic Icons based on direction
-  const DirectionalArrow = isRTL ? ArrowLeft : ArrowRight;
-  const DirectionalChevron = isRTL ? ChevronLeft : ChevronRight;
+  const isRTL = lang === 'ar' || lang === 'ur';
+  const DirectionalArrow = isRTL ? ArrowLeft : ArrowRight; 
 
-  const t = {
+  useEffect(() => {
+    setMounted(true);
+    const hour = new Date().getHours();
+    if (hour >= 18 || hour < 6) setIsDark(true);
+    else setIsDark(false);
+
+    const handleScroll = () => setScrolled(window.scrollY > 50);
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  const content = {
     ar: {
-      nav: {
-        services: 'الخدمات والحلول',
-        tech: 'التقنية والابتكار',
-        about: 'عن الشركة',
-        projects: 'المشاريع',
-        login: 'بوابة الموظفين',
-        contact: 'اتصل بنا'
+      nav: { 
+        services: 'الخدمات', 
+        projects: 'المشاريع', 
+        tech: 'التقنية', 
+        about: 'من نحن',
+        portal: 'بوابة الموظفين',
+        currentLang: 'العربية'
       },
       hero: {
-        badge: 'شريك استراتيجي للمشاريع الحكومية',
-        title1: 'هندسة',
-        title2: 'المستقبل الصناعي',
-        desc: 'نقدم حلولاً متكاملة للبنية التحتية الكهربائية، إدارة القوى العاملة، والتشغيل الميداني الذكي. دقة، كفاءة، وموثوقية تعتمد عليها كبرى القطاعات.',
+        badge: 'رؤية 2030 | شريك استراتيجي',
+        title1: 'هندسة المستقبل',
+        title2: 'والذكاء الصناعي',
+        desc: 'منصة GMS للحلول الصناعية المتكاملة. نجمع بين الخبرة البشرية والتحليلات الرقمية لإدارة البنية التحتية والمشاريع الكبرى.',
         cta1: 'اكتشف خدماتنا',
-        cta2: 'بدء شراكة',
+        cta2: 'تواصل معنا',
         liveOps: 'عمليات مباشرة',
         efficiency: 'الكفاءة'
       },
+      stats: [
+        { val: '+100', label: 'مشروع حكومي' },
+        { val: '99.9%', label: 'دقة تشغيلية' },
+        { val: '24/7', label: 'دعم هندسي' },
+        { val: 'ISO', label: 'معايير عالمية' },
+      ],
       services: {
-        title: 'منظومة الخدمات المتكاملة',
-        sub: 'نحول التحديات الصناعية المعقدة إلى عمليات سلسة ومضبوطة بأعلى المعايير.',
-        viewAll: 'عرض جميع الخدمات',
-        s1_title: 'فحص الجهد العالي والكابلات',
-        s1_desc: 'اختبارات دقيقة، كشف أعطال، وصيانة وقائية للبنية التحتية الكهربائية لضمان استمرارية الطاقة دون انقطاع.',
-        s2_title: 'حلول القوى العاملة الماهرة',
-        s2_desc: 'توريد وإدارة كوادر هندسية وفنية مؤهلة ومعتمدة لتنفيذ المشاريع وفق الجداول الزمنية المحددة بصرامة.',
-        s3_title: 'إدارة المشاريع الصناعية',
-        s3_desc: 'منظومة إدارة رقمية متكاملة تضمن الامتثال، السلامة، والجودة من التخطيط وحتى التسليم النهائي.',
-        features: {
-          vlf: 'اختبار VLF',
-          pd: 'تفريغ جزئي',
-          certified: 'مهندسين معتمدين',
-          emergency: 'فرق طوارئ 24/7',
-          reports: 'تقارير لحظية',
-          risk: 'إدارة المخاطر'
-        }
+        title: 'حلول تتجاوز التوقعات',
+        items: [
+          { title: 'فحص الجهد العالي', desc: 'تشخيص دقيق للكابلات والمحطات باستخدام أحدث تقنيات VLF و PD.', icon: Zap },
+          { title: 'إدارة القوى العاملة', desc: 'فرق هندسية وفنية مدربة على أعلى مستوى وجاهزة للانتشار الفوري.', icon: Users },
+          { title: 'المشاريع الذكية', desc: 'لوحات تحكم رقمية تمنحك رؤية شاملة وسيطرة كاملة على سير العمل.', icon: LayoutDashboard },
+        ]
+      },
+      projects: {
+        title: 'أعمالنا ومشاريعنا',
+        subtitle: 'فخورون بتنفيذ مشاريع استراتيجية تخدم البنية التحتية',
+        items: [
+          { name: 'محطة نيوم الرئيسية', cat: 'طاقة وبنية تحتية', loc: 'نيوم', status: 'مكتمل' },
+          { name: 'صيانة الشبكة الوطنية', cat: 'عقود تشغيل', loc: 'الرياض', status: 'جاري' },
+          { name: 'مشروع البحر الأحمر', cat: 'تمديدات كابلات', loc: 'البحر الأحمر', status: 'قيد التنفيذ' },
+          { name: 'المدينة الصناعية', cat: 'أنظمة تحكم', loc: 'الجبيل', status: 'جديد' },
+        ]
       },
       tech: {
-        tag: 'التحول الرقمي',
+        tag: 'نواة التكنولوجيا',
         title: 'البيانات تقود القرار الميداني',
-        desc: 'نستخدم أحدث تقنيات الـ ERP والذكاء الاصطناعي لمراقبة الأداء لحظياً. لا مكان للتخمين؛ كل قرار مبني على بيانات دقيقة ومباشرة من الموقع.',
-        stat1: 'تتبع الأصول',
-        stat2: 'حوادث تأخير',
-        network: 'حالة الشبكة',
-        stable: 'مستقرة'
-      },
-      trust: {
-        title: 'شركاء النجاح والثقة'
-      },
-      cta: {
-        title: 'التميز التشغيلي يبدأ من هنا',
-        desc: 'دعنا نناقش كيف يمكن لخبراتنا وتقنياتنا أن ترفع كفاءة مشروعك القادم إلى مستويات قياسية. فريقنا الهندسي جاهز للبدء.',
-        btn1: 'جدولة اجتماع',
-        btn2: 'تصفح ملف الشركة'
+        items: [
+          { icon: Server, label: 'ERP سحابي', sub: 'آمن وقابل للتوسع' },
+          { icon: Lock, label: 'أمن سيبراني', sub: 'معايير عسكرية' },
+          { icon: Activity, label: 'مراقبة لحظية', sub: 'تتبع مباشر' },
+          { icon: BarChart3, label: 'تحليلات', sub: 'مدعومة بالذكاء الاصطناعي' },
+        ]
       },
       footer: {
-        desc: 'الذكاء الصناعي والعمليات.',
         rights: '© 2026 منصة GMS. جميع الحقوق محفوظة.',
-        links: ['لينكد إن', 'تويتر', 'اتصل بنا']
+        links: { privacy: 'الخصوصية', terms: 'الشروط', contact: 'اتصل بنا' }
       }
     },
     en: {
-      nav: {
-        services: 'Services & Solutions',
-        tech: 'Tech & Innovation',
-        about: 'About Us',
-        projects: 'Projects',
-        login: 'Employee Portal',
-        contact: 'Contact Us'
+      nav: { 
+        services: 'Services', 
+        projects: 'Projects', 
+        tech: 'Technology', 
+        about: 'About',
+        portal: 'Employee Portal',
+        currentLang: 'English'
       },
       hero: {
-        badge: 'Strategic Partner for Government Projects',
-        title1: 'Engineering the',
-        title2: 'Industrial Future',
-        desc: 'Integrated solutions for electrical infrastructure, workforce management, and smart field operations. Precision, efficiency, and reliability for major sectors.',
-        cta1: 'Discover Services',
-        cta2: 'Start Partnership',
+        badge: 'Vision 2030 | Strategic Partner',
+        title1: 'Engineering Future',
+        title2: '& Industrial AI',
+        desc: 'GMS Platform for integrated industrial solutions. We combine human expertise with digital analytics to manage infrastructure and major projects.',
+        cta1: 'Explore Services',
+        cta2: 'Contact Us',
         liveOps: 'Live Operations',
         efficiency: 'Efficiency'
       },
+      stats: [
+        { val: '+100', label: 'Gov Projects' },
+        { val: '99.9%', label: 'Operational Accuracy' },
+        { val: '24/7', label: 'Eng. Support' },
+        { val: 'ISO', label: 'Global Standards' },
+      ],
       services: {
-        title: 'Integrated Service Ecosystem',
-        sub: 'Transforming complex industrial challenges into seamless, strictly controlled operations.',
-        viewAll: 'View All Services',
-        s1_title: 'High Voltage & Cable Testing',
-        s1_desc: 'Precise testing, fault detection, and preventive maintenance for electrical infrastructure to ensure uninterrupted power.',
-        s2_title: 'Skilled Workforce Solutions',
-        s2_desc: 'Supplying and managing qualified engineering and technical staff to execute projects within strict timelines.',
-        s3_title: 'Industrial Project Management',
-        s3_desc: 'A complete digital management system ensuring compliance, safety, and quality from planning to final delivery.',
-        features: {
-          vlf: 'VLF Testing',
-          pd: 'Partial Discharge',
-          certified: 'Certified Engineers',
-          emergency: '24/7 Emergency Teams',
-          reports: 'Real-time Reports',
-          risk: 'Risk Management'
-        }
+        title: 'Solutions Beyond Expectations',
+        items: [
+          { title: 'High Voltage Testing', desc: 'Precise diagnostics using cutting-edge VLF & PD technologies.', icon: Zap },
+          { title: 'Workforce Management', desc: 'Elite engineering teams ready for immediate deployment.', icon: Users },
+          { title: 'Smart Projects', desc: 'Digital dashboards giving you total visibility and control.', icon: LayoutDashboard },
+        ]
+      },
+      projects: {
+        title: 'Our Projects & Portfolio',
+        subtitle: 'Proudly executing strategic infrastructure projects',
+        items: [
+          { name: 'NEOM Main Substation', cat: 'Energy & Infra', loc: 'NEOM', status: 'Completed' },
+          { name: 'National Grid Maint.', cat: 'O&M Contracts', loc: 'Riyadh', status: 'Ongoing' },
+          { name: 'Red Sea Project', cat: 'Cable Laying', loc: 'Red Sea', status: 'In Progress' },
+          { name: 'Industrial City', cat: 'Control Systems', loc: 'Jubail', status: 'New' },
+        ]
       },
       tech: {
-        tag: 'Digital Transformation',
+        tag: 'Technology Core',
         title: 'Data-Driven Field Decisions',
-        desc: 'We utilize cutting-edge ERP and AI technologies to monitor performance in real-time. No guesswork; every decision is based on accurate, direct site data.',
-        stat1: 'Asset Tracking',
-        stat2: 'Delay Incidents',
-        network: 'Network Status',
-        stable: 'Stable'
-      },
-      trust: {
-        title: 'Trusted Partners'
-      },
-      cta: {
-        title: 'Operational Excellence Starts Here',
-        desc: 'Let’s discuss how our expertise and technology can elevate your next project’s efficiency to standard-setting levels. Our engineering team is ready.',
-        btn1: 'Schedule Meeting',
-        btn2: 'View Company Profile'
+        items: [
+          { icon: Server, label: 'Cloud ERP', sub: 'Secure & Scalable' },
+          { icon: Lock, label: 'Cyber Security', sub: 'Military Grade' },
+          { icon: Activity, label: 'Real-time', sub: 'Monitoring' },
+          { icon: BarChart3, label: 'Analytics', sub: 'AI Powered' },
+        ]
       },
       footer: {
-        desc: 'Industrial Intelligence & Operations.',
         rights: '© 2026 GMS Platform. All rights reserved.',
-        links: ['LinkedIn', 'Twitter', 'Contact']
+        links: { privacy: 'Privacy', terms: 'Terms', contact: 'Contact' }
+      }
+    },
+    ur: {
+      nav: { 
+        services: 'خدمات', 
+        projects: 'منصوبے', 
+        tech: 'ٹیکنالوجی', 
+        about: 'ہمارے بارے میں',
+        portal: 'ملازم پورٹل',
+        currentLang: 'اردو'
+      },
+      hero: {
+        badge: 'ویژن 2030 | اسٹریٹجک پارٹنر',
+        title1: 'مستقبل کی انجینئرنگ',
+        title2: 'اور صنعتی ذہانت',
+        desc: 'GMS پلیٹ فارم مربوط صنعتی حل کے لیے۔ ہم انسانی مہارت کو ڈیجیٹل تجزیات کے ساتھ ملا کر بنیادی ڈھانچے اور بڑے منصوبوں کا انتظام کرتے ہیں۔',
+        cta1: 'خدمات دیکھیں',
+        cta2: 'ہم سے رابطہ کریں',
+        liveOps: 'براہ راست آپریشنز',
+        efficiency: 'کارکردگی'
+      },
+      stats: [
+        { val: '+100', label: 'حکومتی پروجیکٹس' },
+        { val: '99.9%', label: 'آپریشنل درستگی' },
+        { val: '24/7', label: 'انجینئرنگ سپورٹ' },
+        { val: 'ISO', label: 'عالمی معیارات' },
+      ],
+      services: {
+        title: 'توقعات سے بڑھ کر حل',
+        items: [
+          { title: 'ہائی وولٹیج ٹیسٹنگ', desc: 'جدید ترین VLF اور PD ٹیکنالوجیز کا استعمال کرتے ہوئے درست تشخیص۔', icon: Zap },
+          { title: 'ورک فورس مینجمنٹ', desc: 'فوری تعیناتی کے لیے تیار اعلیٰ تربیت یافتہ انجینئرنگ ٹیمیں۔', icon: Users },
+          { title: 'اسمارٹ پروجیکٹس', desc: 'ڈیجیٹل ڈیش بورڈز آپ کو کام کے بہاؤ پر مکمل کنٹرول فراہم کرتے ہیں۔', icon: LayoutDashboard },
+        ]
+      },
+      projects: {
+        title: 'ہمارے پروجیکٹس',
+        subtitle: 'اسٹریٹجک انفراسٹرکچر منصوبوں پر عمل درآمد پر فخر ہے',
+        items: [
+          { name: 'نیوم مین سب اسٹیشن', cat: 'توانائی', loc: 'نیوم', status: 'مکمل' },
+          { name: 'نیشنل گرڈ کی دیکھ بھال', cat: 'دیکھ بھال', loc: 'ریاض', status: 'جاری' },
+          { name: 'ریڈ سی پروجیکٹ', cat: 'کیبلز', loc: 'ریڈ سی', status: 'جاری ہے' },
+          { name: 'انڈسٹریل سٹی', cat: 'سسٹمز', loc: 'جبیل', status: 'نیا' },
+        ]
+      },
+      tech: {
+        tag: 'ٹیکنالوجی کور',
+        title: 'ڈیٹا پر مبنی فیصلے',
+        items: [
+          { icon: Server, label: 'کلاؤڈ ERP', sub: 'محفوظ' },
+          { icon: Lock, label: 'سائبر سیکیورٹی', sub: 'فوجی معیار' },
+          { icon: Activity, label: 'ریئل ٹائم', sub: 'نگرانی' },
+          { icon: BarChart3, label: 'تجزیات', sub: 'AI پاورڈ' },
+        ]
+      },
+      footer: {
+        rights: '© 2026 GMS پلیٹ فارم۔ جملہ حقوق محفوظ ہیں۔',
+        links: { privacy: 'رازداری', terms: 'شرائط', contact: 'رابطہ کریں' }
       }
     }
-  };
+  }[lang];
 
-  const content = t[lang];
+  if (!mounted) return <div className="min-h-screen bg-slate-900"></div>;
 
   return (
-    <div 
-      className={`min-h-screen font-sans transition-colors duration-300 selection:bg-blue-600 selection:text-white overflow-x-hidden ${isRTL ? 'dir-rtl' : 'dir-ltr'} ${isDark ? 'bg-slate-950 text-slate-100' : 'bg-white text-slate-900'}`} 
-      dir={isRTL ? 'rtl' : 'ltr'}
-    >
+    <div className={`min-h-screen font-sans selection:bg-blue-500 selection:text-white transition-colors duration-500 overflow-x-hidden ${isRTL ? 'dir-rtl' : 'dir-ltr'} ${isDark ? 'bg-slate-950 text-slate-100' : 'bg-white text-slate-900'}`} dir={isRTL ? 'rtl' : 'ltr'}>
 
       {/* --- Navbar --- */}
-      <nav className={`fixed w-full z-50 backdrop-blur-md border-b transition-colors duration-300 ${isDark ? 'bg-slate-950/80 border-slate-800' : 'bg-white/90 border-slate-100 shadow-sm'}`}>
-        <div className="max-w-7xl mx-auto px-4 md:px-6 h-20 flex items-center justify-between">
+      <motion.nav 
+        initial={{ y: -100 }}
+        animate={{ y: 0 }}
+        transition={{ duration: 0.5 }}
+        className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${scrolled ? 'h-20 bg-opacity-90 backdrop-blur-xl border-b' : 'h-28 bg-transparent border-transparent'} ${isDark ? 'border-slate-800 bg-slate-950/80' : 'border-slate-200 bg-white/80'}`}
+      >
+        <div className="max-w-7xl mx-auto px-6 h-full flex items-center justify-between">
           
-          <div className="flex items-center gap-3 group cursor-pointer">
-            <img 
-              src="/logo.png" 
-              alt="GMS Logo" 
-              className="h-10 md:h-12 w-auto object-contain group-hover:scale-105 transition-transform" 
-            />
-            <div className="hidden sm:flex flex-col">
-                <span className={`text-lg font-black tracking-tight leading-none ${isDark ? 'text-white' : 'text-slate-900'}`}>GMS Platform</span>
-                <span className={`text-[9px] font-bold tracking-widest uppercase ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Industrial Solutions</span>
+          {/* 1. الشعار واسم الشركة */}
+          <Link href="/" className="flex items-center gap-4 group">
+            <img src="/logo.png" alt="GMS" className="h-16 md:h-20 w-auto object-contain transition-transform duration-300 group-hover:scale-105 drop-shadow-xl" />
+            <div className={`flex flex-col ${scrolled ? 'opacity-0 w-0 overflow-hidden' : 'opacity-100 w-auto'} transition-all duration-300`}>
+              <span className={`font-black tracking-tighter leading-none text-2xl ${isDark ? 'text-white' : 'text-slate-900'}`}>GMS</span>
+              <span className={`text-[10px] font-bold tracking-widest uppercase ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>Platform</span>
             </div>
-          </div>
-          
-          {/* Desktop Menu */}
-          <div className={`hidden lg:flex items-center gap-8 text-sm font-bold ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
-            <Link href="#services" className="hover:text-blue-500 transition-colors">{content.nav.services}</Link>
-            <Link href="#technology" className="hover:text-blue-500 transition-colors">{content.nav.tech}</Link>
-            <Link href="#about" className="hover:text-blue-500 transition-colors">{content.nav.about}</Link>
-            <Link href="#projects" className="hover:text-blue-500 transition-colors">{content.nav.projects}</Link>
+          </Link>
+
+          {/* 2. روابط الأقسام (تمت استعادتها) */}
+          <div className="hidden lg:flex items-center gap-8 font-bold text-sm">
+            <Link href="#services" className={`hover:text-blue-500 transition ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>{content.nav.services}</Link>
+            <Link href="#projects" className={`hover:text-blue-500 transition ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>{content.nav.projects}</Link>
+            <Link href="#tech" className={`hover:text-blue-500 transition ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>{content.nav.tech}</Link>
+            <Link href="#about" className={`hover:text-blue-500 transition ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>{content.nav.about}</Link>
           </div>
 
+          {/* 3. الأدوات (لغة، ثيم، دخول) */}
           <div className="flex items-center gap-3">
             
-            {/* Theme Toggle Button */}
-            <button 
-              onClick={toggleTheme} 
-              className={`p-2 rounded-full transition-colors ${isDark ? 'bg-slate-800 text-yellow-400 hover:bg-slate-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
-              title={isDark ? "Switch to Light Mode" : "Switch to Dark Mode"}
-            >
-              {isDark ? <Sun size={18} /> : <Moon size={18} />}
+            {/* زر الثيم */}
+            <button onClick={toggleTheme} className={`p-3 rounded-full transition-all duration-300 ${isDark ? 'bg-slate-800 text-yellow-400 hover:bg-slate-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+              {isDark ? <Sun size={20} /> : <Moon size={20} />}
             </button>
 
-            {/* Language Toggle */}
-            <button 
-              onClick={toggleLang} 
-              className={`flex items-center gap-2 font-bold transition px-3 py-2 rounded-lg border text-sm ${isDark ? 'text-slate-300 hover:text-white hover:bg-slate-800 border-transparent hover:border-slate-700' : 'text-slate-600 hover:text-blue-700 hover:bg-slate-50 border-transparent hover:border-slate-200'}`}
-            >
-               <Globe size={16} /> {lang === 'ar' ? 'EN' : 'عربي'}
-            </button>
+            {/* 4. قائمة اللغة المنسدلة */}
+            <div className="relative">
+              <button 
+                onClick={() => setIsLangOpen(!isLangOpen)}
+                className={`flex items-center gap-2 px-5 py-2.5 rounded-full text-xs font-bold transition-all duration-300 border ${isDark ? 'bg-slate-800 border-slate-700 text-slate-300 hover:text-white' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}
+              >
+                <Globe className="w-3 h-3"/> {content.nav.currentLang} <ChevronDown className="w-3 h-3"/>
+              </button>
+              
+              <AnimatePresence>
+                {isLangOpen && (
+                  <motion.div 
+                    initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }}
+                    className={`absolute top-full mt-2 w-32 rounded-xl shadow-xl border overflow-hidden p-1 z-50 ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'} ${isRTL ? 'left-0' : 'right-0'}`}
+                  >
+                    {['ar', 'en', 'ur'].map((l) => (
+                      <button
+                        key={l}
+                        onClick={() => { setLang(l as any); setIsLangOpen(false); }}
+                        className={`w-full text-start px-4 py-2 rounded-lg text-sm font-bold transition-colors ${lang === l ? 'bg-blue-600 text-white' : isDark ? 'text-slate-300 hover:bg-slate-800' : 'text-slate-600 hover:bg-slate-50'}`}
+                      >
+                        {l === 'ar' ? 'العربية' : l === 'en' ? 'English' : 'اردو'}
+                      </button>
+                    ))}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
 
-            <Link 
-              href="/login" 
-              className={`hidden md:flex items-center gap-2 font-bold transition px-4 py-2 rounded-lg ${isDark ? 'text-slate-300 hover:text-white hover:bg-slate-900' : 'text-slate-600 hover:text-blue-700 hover:bg-slate-50'}`}
-            >
-              <LayoutDashboard className="w-4 h-4" />
-              <span>{content.nav.login}</span>
-            </Link>
-            
-            <Link 
-              href="#contact" 
-              className="bg-blue-600 hover:bg-blue-500 text-white px-5 py-2.5 rounded-xl font-bold text-sm transition-all shadow-lg shadow-blue-600/20 hover:shadow-blue-600/40 flex items-center gap-2 group"
-            >
-              <span className="hidden sm:inline">{content.nav.contact}</span> 
-              <span className="sm:hidden"><Phone size={16}/></span>
-              <DirectionalChevron className="hidden sm:block w-4 h-4 group-hover:translate-x-1 transition-transform rtl:group-hover:-translate-x-1" />
+            <Link href="/login" className={`hidden md:flex items-center gap-2 px-6 py-3 rounded-full font-bold text-sm transition-all duration-300 shadow-lg ${isDark ? 'bg-white text-slate-900 hover:bg-blue-50' : 'bg-slate-900 text-white hover:bg-slate-800'}`}>
+              <LayoutDashboard size={18} /> <span className="hidden lg:inline">{content.nav.portal}</span>
             </Link>
           </div>
         </div>
-      </nav>
+      </motion.nav>
 
       {/* --- Hero Section --- */}
-      <section className={`relative min-h-screen flex items-center pt-32 pb-20 overflow-hidden transition-colors duration-300 ${isDark ? 'bg-gradient-to-b from-slate-950 via-slate-950/90 to-slate-950' : 'bg-gradient-to-b from-slate-50 via-white to-white'}`}>
-        
-        {/* Background Blobs (Adjusted opacity for themes) */}
-        <div className={`absolute top-0 w-[600px] h-[600px] bg-blue-100/50 rounded-full blur-[120px] ${isRTL ? '-left-20' : '-right-20'} ${isDark ? 'opacity-10 bg-blue-600/20' : 'opacity-100'}`}></div>
-        <div className={`absolute bottom-0 w-[500px] h-[500px] bg-cyan-100/40 rounded-full blur-[100px] ${isRTL ? '-right-20' : '-left-20'} ${isDark ? 'opacity-10 bg-cyan-500/10' : 'opacity-100'}`}></div>
+      <section className="relative min-h-screen flex items-center justify-center pt-24 overflow-hidden">
+        <div className={`absolute inset-0 transition-opacity duration-700 ${isDark ? 'opacity-30' : 'opacity-10'}`}>
+           <div className="absolute inset-0 bg-[url('/hero-bg.jpg')] bg-cover bg-center scale-105 animate-slow-zoom"></div>
+           <div className={`absolute inset-0 bg-gradient-to-b ${isDark ? 'from-slate-950 via-slate-950/80 to-slate-950' : 'from-white via-white/80 to-white'}`}></div>
+        </div>
 
-        {/* Dark Mode Specific Background Image Overlay */}
-        {isDark && <div className="absolute inset-0 bg-[url('/hero-bg.jpg')] bg-cover bg-center opacity-20"></div>}
+        {/* Watermark Logo */}
+        <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] md:w-[900px] opacity-[0.04] pointer-events-none z-0 ${isDark ? 'invert-0' : 'invert'}`}>
+            <img src="/logo.png" alt="Watermark" className="w-full h-full object-contain" />
+        </div>
 
-        <div className="max-w-7xl mx-auto px-4 md:px-6 relative z-10 grid lg:grid-cols-2 gap-12 lg:gap-20 items-center">
-          
+        <div className="max-w-7xl mx-auto px-6 relative z-10 grid lg:grid-cols-2 gap-16 items-center">
           <div className="text-center lg:text-start">
-            <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full border text-xs font-bold uppercase tracking-wider mb-8 shadow-sm ${isDark ? 'bg-slate-900/50 border-slate-700 text-blue-400 backdrop-blur-sm' : 'bg-white border-slate-200 text-blue-600'}`}>
-              <ShieldCheck className="w-4 h-4" /> {content.hero.badge}
-            </div>
+            <FadeIn>
+              <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full border mb-8 backdrop-blur-md ${isDark ? 'bg-slate-900/50 border-slate-700 text-blue-400' : 'bg-white/80 border-slate-200 text-blue-700'}`}>
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
+                </span>
+                <span className="text-xs font-bold tracking-wider">{content.hero.badge}</span>
+              </div>
+            </FadeIn>
 
-            <h1 className={`text-5xl md:text-6xl lg:text-7xl font-black tracking-tighter mb-6 leading-[1.1] ${isDark ? 'text-white' : 'text-slate-900'}`}>
+            <motion.h1 
+              initial={{ opacity: 0, y: 30 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.8, delay: 0.2 }}
+              className={`text-5xl md:text-7xl lg:text-8xl font-black tracking-tighter mb-6 leading-[1.1] ${isDark ? 'text-white' : 'text-slate-900'}`}
+            >
               {content.hero.title1} <br />
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-cyan-500">
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-500 via-cyan-400 to-emerald-400 animate-gradient-x">
                 {content.hero.title2}
               </span>
-            </h1>
+            </motion.h1>
 
-            <p className={`text-lg md:text-xl max-w-xl mx-auto lg:mx-0 leading-relaxed mb-10 font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-              {content.hero.desc}
-            </p>
+            <FadeIn delay={0.4}>
+              <p className={`text-lg md:text-xl max-w-xl mx-auto lg:mx-0 leading-relaxed mb-10 font-medium ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+                {content.hero.desc}
+              </p>
+            </FadeIn>
 
-            <div className="flex flex-col sm:flex-row items-center gap-4 justify-center lg:justify-start">
-              <Link href="#services" className={`w-full sm:w-auto px-8 py-4 rounded-xl font-bold transition-all flex items-center justify-center gap-2 shadow-xl ${isDark ? 'bg-white text-slate-950 hover:bg-blue-50' : 'bg-slate-900 text-white hover:bg-slate-800 shadow-slate-900/10'}`}>
-                {content.hero.cta1} <DirectionalArrow className="w-5 h-5" />
-              </Link>
-              <Link href="#contact" className={`w-full sm:w-auto px-8 py-4 border rounded-xl font-bold transition-all flex items-center justify-center gap-2 shadow-sm ${isDark ? 'bg-slate-900/50 text-white border-slate-700 hover:border-blue-500 hover:bg-blue-900/20' : 'bg-white text-slate-700 border-slate-200 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700'}`}>
-                <Activity className="w-5 h-5" /> {content.hero.cta2}
-              </Link>
-            </div>
+            <FadeIn delay={0.6}>
+              <div className="flex flex-col sm:flex-row items-center gap-4 justify-center lg:justify-start">
+                <Link href="#services" className={`group w-full sm:w-auto px-8 py-4 rounded-full font-bold transition-all flex items-center justify-center gap-2 shadow-2xl hover:scale-105 ${isDark ? 'bg-white text-slate-950 hover:bg-blue-50' : 'bg-slate-900 text-white hover:bg-slate-800'}`}>
+                  {content.hero.cta1} <DirectionalArrow className="w-5 h-5 group-hover:translate-x-1 transition-transform rtl:group-hover:-translate-x-1" />
+                </Link>
+                <Link href="#contact" className={`group w-full sm:w-auto px-8 py-4 rounded-full font-bold transition-all flex items-center justify-center gap-2 backdrop-blur-md border ${isDark ? 'bg-white/5 border-white/10 text-white hover:bg-white/10' : 'bg-slate-100 border-slate-200 text-slate-700 hover:bg-slate-200'}`}>
+                  <Phone className="w-5 h-5" /> {content.hero.cta2}
+                </Link>
+              </div>
+            </FadeIn>
           </div>
 
-          {/* Visual Element (Right Side) */}
-          <div className="relative mt-10 lg:mt-0">
-             <div className={`relative rounded-3xl overflow-hidden border shadow-2xl group p-2 ${isDark ? 'border-slate-800 shadow-blue-900/20 bg-transparent' : 'border-slate-100 shadow-slate-200 bg-white'}`}>
-                <div className={`absolute inset-0 z-10 ${isDark ? 'bg-gradient-to-t from-slate-950 via-transparent to-transparent' : ''}`}></div>
-                <img 
-                    src="/industrial-ops.jpg" 
-                    alt="Industrial Operations" 
-                    className={`w-full h-[400px] md:h-[500px] lg:h-[600px] object-cover rounded-2xl group-hover:scale-105 transition-transform duration-700 ${isDark ? 'opacity-80' : ''}`}
-                />
-                
-                {/* Floating Card */}
-                <div className={`absolute bottom-8 z-20 backdrop-blur-md p-6 rounded-2xl border shadow-xl w-64 ${isRTL ? 'right-8' : 'left-8'} ${isDark ? 'bg-slate-900/80 border-slate-700' : 'bg-white/90 border-slate-100'}`}>
-                    <div className="flex items-center gap-3 mb-3">
-                        <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
-                        <span className={`text-xs font-bold uppercase ${isDark ? 'text-slate-300' : 'text-slate-500'}`}>{content.hero.liveOps}</span>
-                    </div>
-                    <div className="space-y-2">
-                        <div className="flex justify-between text-sm font-medium">
-                            <span className={isDark ? 'text-slate-400' : 'text-slate-400'}>{content.hero.efficiency}</span>
-                            <span className={isDark ? 'text-white' : 'text-slate-900'}>98.4%</span>
+          <motion.div 
+            initial={{ opacity: 0, x: isRTL ? -50 : 50 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 1, delay: 0.5 }}
+            className="relative hidden lg:block perspective-1000"
+          >
+             <div className={`relative rounded-[2.5rem] overflow-hidden border p-3 shadow-2xl transition-all duration-500 hover:rotate-1 hover:scale-[1.02] ${isDark ? 'border-slate-800 bg-slate-900/50 shadow-blue-900/20' : 'border-slate-100 bg-white shadow-slate-200'}`}>
+                <div className="relative rounded-[2rem] overflow-hidden h-[500px] w-full">
+                  <img src="/industrial-ops.jpg" alt="Operations" className="w-full h-full object-cover" />
+                  <div className={`absolute inset-0 bg-gradient-to-t ${isDark ? 'from-slate-950/90' : 'from-white/90'} via-transparent to-transparent`}></div>
+                  <motion.div 
+                    initial={{ y: 20, opacity: 0 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    transition={{ delay: 1, duration: 0.8 }}
+                    className={`absolute bottom-8 left-8 right-8 p-6 rounded-2xl border backdrop-blur-xl ${isDark ? 'bg-slate-900/60 border-slate-700' : 'bg-white/60 border-white/50'}`}
+                  >
+                    <div className="flex justify-between items-end">
+                      <div>
+                        <p className={`text-xs font-bold uppercase mb-2 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>System Status</p>
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 bg-emerald-500 rounded-full animate-pulse"></div>
+                          <span className={`text-xl font-black ${isDark ? 'text-white' : 'text-slate-900'}`}>{content.hero.liveOps}</span>
                         </div>
-                        <div className={`w-full h-1.5 rounded-full overflow-hidden ${isDark ? 'bg-slate-700' : 'bg-slate-100'}`}>
-                            <div className="h-full bg-blue-600 w-[98%]"></div>
-                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className={`text-3xl font-black ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>99.8%</p>
+                        <p className={`text-xs font-bold ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{content.hero.efficiency}</p>
+                      </div>
                     </div>
+                  </motion.div>
                 </div>
              </div>
+          </motion.div>
+        </div>
+      </section>
+
+      {/* --- Projects Section --- */}
+      <section id="projects" className={`py-32 relative overflow-hidden ${isDark ? 'bg-slate-950' : 'bg-white'}`}>
+        <div className="max-w-7xl mx-auto px-6">
+          <FadeIn>
+            <div className="text-center mb-20">
+              <span className={`text-xs font-bold uppercase tracking-widest mb-4 block ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>Portfolio</span>
+              <h2 className={`text-3xl md:text-5xl font-black ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                {content.projects.title}
+              </h2>
+              <p className={`mt-4 text-xl ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{content.projects.subtitle}</p>
+            </div>
+          </FadeIn>
+
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {content.projects.items.map((proj, i) => (
+              <FadeIn key={i} delay={i * 0.1}>
+                <div className={`group relative h-96 rounded-3xl overflow-hidden border cursor-pointer transition-all duration-500 hover:shadow-2xl ${isDark ? 'border-slate-800 bg-slate-900' : 'border-slate-200 bg-slate-50'}`}>
+                  <div className={`absolute inset-0 bg-cover bg-center transition-transform duration-700 group-hover:scale-110`} style={{ backgroundImage: "url('/industrial-ops.jpg')" }}></div>
+                  <div className={`absolute inset-0 bg-gradient-to-t ${isDark ? 'from-slate-950 via-slate-900/50 to-transparent' : 'from-slate-900/90 via-slate-900/40 to-transparent'}`}></div>
+                  
+                  <div className="absolute bottom-0 left-0 right-0 p-6 z-20 translate-y-2 group-hover:translate-y-0 transition-transform duration-300">
+                    <div className="flex justify-between items-center mb-2">
+                      <span className={`text-[10px] font-bold px-2 py-1 rounded bg-blue-600 text-white`}>{proj.cat}</span>
+                      <span className={`text-[10px] font-bold text-slate-300 flex items-center gap-1`}><MapPin size={10}/> {proj.loc}</span>
+                    </div>
+                    <h3 className="text-xl font-bold text-white mb-1 leading-tight">{proj.name}</h3>
+                    <div className="h-0 group-hover:h-auto overflow-hidden transition-all duration-300">
+                       <div className="flex justify-between items-center text-slate-300 text-xs font-bold pt-3 border-t border-white/20 mt-3">
+                          <span className="flex items-center gap-1"><CheckCircle2 size={12} className="text-emerald-400"/> {proj.status}</span>
+                          <ArrowLeft className={`w-4 h-4 text-white ${isRTL ? '' : 'rotate-180'}`}/>
+                       </div>
+                    </div>
+                  </div>
+                </div>
+              </FadeIn>
+            ))}
           </div>
         </div>
       </section>
 
       {/* --- Services Section --- */}
-      <section id="services" className={`py-24 relative transition-colors duration-300 ${isDark ? 'bg-slate-900' : 'bg-slate-50'}`}>
-        <div className="max-w-7xl mx-auto px-4 md:px-6">
-          <div className="flex flex-col md:flex-row justify-between items-end mb-16 gap-6 text-center md:text-start">
-            <div>
-                <h2 className={`text-3xl md:text-5xl font-black mb-4 ${isDark ? 'text-white' : 'text-slate-900'}`}>{content.services.title}</h2>
-                <p className={`text-lg max-w-lg mx-auto md:mx-0 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{content.services.sub}</p>
-            </div>
-            <Link href="/services" className={`font-bold flex items-center justify-center gap-2 transition-colors px-5 py-3 rounded-xl border shadow-sm ${isDark ? 'text-blue-400 hover:text-white border-slate-700 hover:bg-slate-800 bg-transparent' : 'text-blue-600 hover:text-blue-800 bg-white border-slate-200'}`}>
-                {content.services.viewAll} <DirectionalArrow className="w-5 h-5" />
-            </Link>
-          </div>
+      <section id="services" className={`py-32 relative ${isDark ? 'bg-slate-900' : 'bg-slate-50'}`}>
+        <div className="max-w-7xl mx-auto px-6">
+          <FadeIn>
+            <h2 className={`text-3xl md:text-5xl font-black text-center mb-20 ${isDark ? 'text-white' : 'text-slate-900'}`}>
+              {content.services.title}
+            </h2>
+          </FadeIn>
 
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {/* Service 1 */}
-            <div className={`group p-8 rounded-3xl border transition-all duration-300 hover:shadow-xl ${isDark ? 'bg-slate-950 border-slate-800 hover:border-blue-500/50' : 'bg-white border-slate-200 hover:border-blue-200 hover:shadow-blue-900/5'}`}>
-              <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mb-6 transition-colors ${isDark ? 'bg-slate-900 border border-slate-800 text-blue-500 group-hover:bg-blue-600 group-hover:text-white' : 'bg-blue-50 text-blue-600 group-hover:bg-blue-600 group-hover:text-white'}`}>
-                <Zap className="w-7 h-7" />
-              </div>
-              <h3 className={`text-xl font-bold mb-3 ${isDark ? 'text-white' : 'text-slate-900'}`}>{content.services.s1_title}</h3>
-              <p className={`leading-relaxed mb-6 text-sm ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                {content.services.s1_desc}
-              </p>
-              <ul className={`space-y-2 border-t pt-4 ${isDark ? 'border-slate-800' : 'border-slate-100'}`}>
-                <li className={`flex items-center gap-2 text-sm font-medium ${isDark ? 'text-slate-500' : 'text-slate-600'}`}><CheckCircle2 className={`w-4 h-4 ${isDark ? 'text-blue-500' : 'text-green-500'}`}/> {content.services.features.vlf}</li>
-                <li className={`flex items-center gap-2 text-sm font-medium ${isDark ? 'text-slate-500' : 'text-slate-600'}`}><CheckCircle2 className={`w-4 h-4 ${isDark ? 'text-blue-500' : 'text-green-500'}`}/> {content.services.features.pd}</li>
-              </ul>
-            </div>
-
-            {/* Service 2 */}
-            <div className={`group p-8 rounded-3xl border transition-all duration-300 hover:shadow-xl ${isDark ? 'bg-slate-950 border-slate-800 hover:border-blue-500/50' : 'bg-white border-slate-200 hover:border-blue-200 hover:shadow-blue-900/5'}`}>
-              <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mb-6 transition-colors ${isDark ? 'bg-slate-900 border border-slate-800 text-blue-500 group-hover:bg-blue-600 group-hover:text-white' : 'bg-blue-50 text-blue-600 group-hover:bg-blue-600 group-hover:text-white'}`}>
-                <Users className="w-7 h-7" />
-              </div>
-              <h3 className={`text-xl font-bold mb-3 ${isDark ? 'text-white' : 'text-slate-900'}`}>{content.services.s2_title}</h3>
-              <p className={`leading-relaxed mb-6 text-sm ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                {content.services.s2_desc}
-              </p>
-              <ul className={`space-y-2 border-t pt-4 ${isDark ? 'border-slate-800' : 'border-slate-100'}`}>
-                <li className={`flex items-center gap-2 text-sm font-medium ${isDark ? 'text-slate-500' : 'text-slate-600'}`}><CheckCircle2 className={`w-4 h-4 ${isDark ? 'text-blue-500' : 'text-green-500'}`}/> {content.services.features.certified}</li>
-                <li className={`flex items-center gap-2 text-sm font-medium ${isDark ? 'text-slate-500' : 'text-slate-600'}`}><CheckCircle2 className={`w-4 h-4 ${isDark ? 'text-blue-500' : 'text-green-500'}`}/> {content.services.features.emergency}</li>
-              </ul>
-            </div>
-
-            {/* Service 3 */}
-            <div className={`group p-8 rounded-3xl border transition-all duration-300 hover:shadow-xl ${isDark ? 'bg-slate-950 border-slate-800 hover:border-blue-500/50' : 'bg-white border-slate-200 hover:border-blue-200 hover:shadow-blue-900/5'}`}>
-              <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mb-6 transition-colors ${isDark ? 'bg-slate-900 border border-slate-800 text-blue-500 group-hover:bg-blue-600 group-hover:text-white' : 'bg-blue-50 text-blue-600 group-hover:bg-blue-600 group-hover:text-white'}`}>
-                <HardHat className="w-7 h-7" />
-              </div>
-              <h3 className={`text-xl font-bold mb-3 ${isDark ? 'text-white' : 'text-slate-900'}`}>{content.services.s3_title}</h3>
-              <p className={`leading-relaxed mb-6 text-sm ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                {content.services.s3_desc}
-              </p>
-              <ul className={`space-y-2 border-t pt-4 ${isDark ? 'border-slate-800' : 'border-slate-100'}`}>
-                <li className={`flex items-center gap-2 text-sm font-medium ${isDark ? 'text-slate-500' : 'text-slate-600'}`}><CheckCircle2 className={`w-4 h-4 ${isDark ? 'text-blue-500' : 'text-green-500'}`}/> {content.services.features.reports}</li>
-                <li className={`flex items-center gap-2 text-sm font-medium ${isDark ? 'text-slate-500' : 'text-slate-600'}`}><CheckCircle2 className={`w-4 h-4 ${isDark ? 'text-blue-500' : 'text-green-500'}`}/> {content.services.features.risk}</li>
-              </ul>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* --- Technology & Data Section --- */}
-      <section className={`py-24 relative overflow-hidden transition-colors duration-300 ${isDark ? 'bg-slate-950' : 'bg-white'}`}>
-        {isDark && <div className="absolute inset-0 bg-[url('/tech-bg.jpg')] bg-cover bg-fixed opacity-5"></div>}
-        
-        <div className="max-w-7xl mx-auto px-4 md:px-6 relative z-10">
-            <div className="flex flex-col lg:flex-row items-center gap-16">
-                <div className="lg:w-1/2 text-center lg:text-start">
-                    <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full border text-xs font-bold uppercase mb-6 ${isDark ? 'bg-blue-900/30 border-blue-800 text-blue-400' : 'bg-blue-50 border-blue-100 text-blue-600'}`}>
-                        <Server className="w-4 h-4"/> {content.tech.tag}
+          <div className="grid md:grid-cols-3 gap-8">
+            {content.services.items.map((item, i) => (
+              <FadeIn key={i} delay={i * 0.2}>
+                <SpotlightCard isDark={isDark} className="h-full">
+                  <div className="p-8 h-full flex flex-col relative z-10">
+                    <div className={`w-16 h-16 rounded-2xl flex items-center justify-center mb-8 transition-colors ${isDark ? 'bg-slate-800 text-blue-400' : 'bg-blue-50 text-blue-600'}`}>
+                      <item.icon size={32} />
                     </div>
-                    <h2 className={`text-3xl md:text-5xl font-black mb-6 leading-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                        {content.tech.title}
-                    </h2>
-                    <p className={`text-lg mb-8 leading-relaxed ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                        {content.tech.desc}
+                    <h3 className={`text-2xl font-bold mb-4 ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                      {item.title}
+                    </h3>
+                    <p className={`text-lg leading-relaxed mb-8 flex-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                      {item.desc}
                     </p>
-                    
-                    <div className="grid grid-cols-2 gap-6">
-                        <div className={`p-6 rounded-2xl border ${isDark ? 'bg-slate-900/50 border-slate-800' : 'bg-slate-50 border-slate-100'}`}>
-                            <div className={`text-3xl font-black mb-1 ${isDark ? 'text-white' : 'text-blue-600'}`}>100%</div>
-                            <div className={`text-sm font-bold ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>{content.tech.stat1}</div>
-                        </div>
-                        <div className={`p-6 rounded-2xl border ${isDark ? 'bg-slate-900/50 border-slate-800' : 'bg-slate-50 border-slate-100'}`}>
-                            <div className={`text-3xl font-black mb-1 ${isDark ? 'text-white' : 'text-slate-900'}`}>0</div>
-                            <div className={`text-sm font-bold ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>{content.tech.stat2}</div>
-                        </div>
+                    <div className={`w-full h-1 rounded-full ${isDark ? 'bg-slate-800' : 'bg-slate-100'}`}>
+                      <div className="h-full w-1/3 bg-blue-500 rounded-full"></div>
                     </div>
-                </div>
-                
-                <div className="lg:w-1/2 w-full">
-                    <div className={`relative border rounded-2xl p-2 shadow-2xl ${isDark ? 'bg-slate-900 border-slate-800 shadow-blue-900/20' : 'bg-white border-slate-200 shadow-slate-200'}`}>
-                        <div className={`absolute -top-10 w-40 h-40 bg-blue-600 rounded-full blur-[60px] ${isDark ? 'opacity-30' : 'opacity-70'} ${isRTL ? '-right-10' : '-left-10'}`}></div>
-                        <img 
-                            src="/dashboard-preview.jpg" 
-                            alt="Dashboard" 
-                            className={`rounded-xl w-full h-auto shadow-sm ${isDark ? 'opacity-90' : ''}`}
-                        />
-                        {/* Floating Cards */}
-                        <div className={`absolute top-10 backdrop-blur border p-4 rounded-xl shadow-lg w-40 animate-bounce-slow ${isRTL ? 'left-6' : 'right-6'} ${isDark ? 'bg-slate-800/90 border-slate-600' : 'bg-white/95 border-slate-100'}`}>
-                            <div className="text-xs text-slate-400 mb-1">{content.tech.network}</div>
-                            <div className="text-green-400 font-bold flex items-center gap-2"><div className="w-2 h-2 bg-green-500 rounded-full"></div> {content.tech.stable}</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-      </section>
-
-      {/* --- Partners / Trust --- */}
-      <section className={`py-20 border-t ${isDark ? 'border-slate-900 bg-slate-950' : 'border-slate-100 bg-slate-50'}`}>
-        <div className="max-w-7xl mx-auto px-4 md:px-6 text-center">
-            <p className={`font-bold text-xs uppercase tracking-widest mb-10 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{content.trust.title}</p>
-            <div className="flex flex-wrap justify-center gap-8 md:gap-16 opacity-40 grayscale hover:grayscale-0 transition-all duration-500">
-                <div className={`text-xl md:text-2xl font-black flex items-center gap-2 transition-colors ${isDark ? 'text-slate-400 hover:text-white' : 'text-slate-400 hover:text-slate-600'}`}><Factory className="w-6 h-6 md:w-8 md:h-8"/> INDUSTRIAL</div>
-                <div className={`text-xl md:text-2xl font-black flex items-center gap-2 transition-colors ${isDark ? 'text-slate-400 hover:text-white' : 'text-slate-400 hover:text-slate-600'}`}><Globe className="w-6 h-6 md:w-8 md:h-8"/> GLOBAL CORP</div>
-                <div className={`text-xl md:text-2xl font-black flex items-center gap-2 transition-colors ${isDark ? 'text-slate-400 hover:text-white' : 'text-slate-400 hover:text-slate-600'}`}><Zap className="w-6 h-6 md:w-8 md:h-8"/> ENERGY CO</div>
-                <div className={`text-xl md:text-2xl font-black flex items-center gap-2 transition-colors ${isDark ? 'text-slate-400 hover:text-white' : 'text-slate-400 hover:text-slate-600'}`}><ShieldCheck className="w-6 h-6 md:w-8 md:h-8"/> GOV SECURE</div>
-            </div>
-        </div>
-      </section>
-
-      {/* --- CTA Section --- */}
-      <section id="contact" className="py-24 bg-blue-900 relative overflow-hidden">
-        <div className={`absolute inset-0 bg-gradient-to-r ${isDark ? 'from-blue-900/50 to-transparent' : 'from-blue-900 to-slate-900 opacity-90'}`}></div>
-        {isDark && <div className="absolute inset-0 bg-slate-950/80"></div>}
-        
-        <div className="max-w-4xl mx-auto px-6 relative z-10 text-center">
-          <h2 className="text-3xl md:text-5xl font-black text-white mb-6 leading-tight">{content.cta.title}</h2>
-          <p className="text-lg md:text-xl text-blue-100 mb-10 leading-relaxed max-w-2xl mx-auto">
-            {content.cta.desc}
-          </p>
-          
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link href="/contact" className="px-10 py-4 bg-white text-blue-900 rounded-xl font-bold text-lg hover:bg-blue-50 transition-all shadow-xl shadow-black/20 flex items-center justify-center gap-2">
-              {content.cta.btn1} <DirectionalChevron className="w-5 h-5"/>
-            </Link>
-            <Link href="/services" className="px-10 py-4 bg-transparent border border-blue-400/50 text-white rounded-xl font-bold text-lg hover:bg-blue-800/50 transition-all">
-              {content.cta.btn2}
-            </Link>
+                  </div>
+                </SpotlightCard>
+              </FadeIn>
+            ))}
           </div>
         </div>
       </section>
 
       {/* --- Footer --- */}
       <footer className={`py-12 border-t ${isDark ? 'bg-slate-950 border-slate-900' : 'bg-white border-slate-100'}`}>
-        <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-8 text-center md:text-start">
-          <div>
-            <div className={`text-xl font-black flex items-center justify-center md:justify-start gap-2 mb-2 ${isDark ? 'text-white' : 'text-slate-900'}`}>
-              <img 
-                src="/logo.png" 
-                alt="GMS Logo" 
-                className="w-8 h-8 object-contain" 
-              />
-              GMS Platform
-            </div>
-            <p className="text-slate-500 text-sm">{content.footer.desc}</p>
+        <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-6">
+          <div className="flex items-center gap-2">
+            <img src="/logo.png" alt="GMS" className="h-8 w-auto grayscale hover:grayscale-0 transition-all opacity-70 hover:opacity-100" />
+            <span className={`font-bold text-sm ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{content.footer.rights}</span>
           </div>
-          
-          <div className={`text-sm font-medium ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
-            {content.footer.rights}
-          </div>
-          
-          <div className="flex gap-6 text-sm font-bold">
-            {content.footer.links.map((link, i) => (
-                <a key={i} href="#" className={`${isDark ? 'text-slate-400 hover:text-white' : 'text-slate-500 hover:text-blue-600'} transition-colors`}>{link}</a>
-            ))}
+          <div className={`flex gap-6 text-sm font-bold ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+            <Link href="#" className="hover:text-blue-500 transition-colors">{content.footer.links.privacy}</Link>
+            <Link href="#" className="hover:text-blue-500 transition-colors">{content.footer.links.contact}</Link>
           </div>
         </div>
       </footer>

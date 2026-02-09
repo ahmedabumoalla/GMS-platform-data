@@ -1,17 +1,17 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import Link from 'next/link';
 import { 
   Users, Wallet, Briefcase, Activity, CheckCircle2, 
   Clock, AlertTriangle, TrendingUp, MapPin, Calendar, 
   ArrowLeft, ArrowRight, ShieldCheck, LayoutDashboard,
-  Filter, FileText, ChevronDown, Bell
+  Filter, FileText, ChevronDown
 } from 'lucide-react';
 // استدعاء الكونتكست من ملف اللاي أوت
 import { useDashboard } from './layout'; 
 
 // --- Types & Role Definitions ---
+// يمكنك تغيير الدور الافتراضي هنا أو جلبه من الـ API
 type UserRole = 'super_admin' | 'project_manager' | 'technician';
 
 interface DashboardStats {
@@ -22,8 +22,11 @@ interface DashboardStats {
 }
 
 export default function DashboardPage() {
-  const { isDark, lang } = useDashboard(); // ✅ استخدام الحالة من اللاي أوت
-  const [role, setRole] = useState<UserRole>('project_manager');
+  const { isDark, lang } = useDashboard(); 
+  
+  // ✅ تثبيت الدور هنا (يمكنك تغييره إلى 'super_admin' أو جلبه من جلسة المستخدم)
+  const [role] = useState<UserRole>('project_manager'); 
+  
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<DashboardStats | null>(null);
 
@@ -155,19 +158,6 @@ export default function DashboardPage() {
   return (
     <div className="space-y-8 animate-in fade-in zoom-in duration-300">
       
-      {/* Role Switcher (For Demo) - Optional */}
-      <div className="flex justify-end">
-         <select 
-            value={role} 
-            onChange={(e) => setRole(e.target.value as UserRole)}
-            className={`text-xs font-bold px-3 py-1 rounded-lg border outline-none cursor-pointer ${isDark ? 'bg-slate-800 border-slate-700 text-slate-300' : 'bg-white border-slate-300 text-slate-600'}`}
-          >
-            <option value="super_admin">View as Admin</option>
-            <option value="project_manager">View as Manager</option>
-            <option value="technician">View as Technician</option>
-          </select>
-      </div>
-
       {/* --- Welcome Block --- */}
       <div className={`p-8 rounded-[2rem] border relative overflow-hidden flex flex-col md:flex-row justify-between items-start md:items-center gap-6 ${isDark ? 'bg-gradient-to-br from-slate-900 to-slate-950 border-slate-800' : 'bg-white border-slate-200 shadow-sm'}`}>
         <div className={`absolute top-0 right-0 w-64 h-64 rounded-full blur-3xl opacity-20 -mr-20 -mt-20 ${isDark ? 'bg-blue-600' : 'bg-blue-200'}`}></div>

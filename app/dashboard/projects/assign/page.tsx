@@ -4,10 +4,13 @@ import { useState, useEffect } from 'react';
 import { 
   Search, Filter, Briefcase, UserPlus, Calendar, 
   AlertTriangle, CheckCircle2, ChevronDown, LayoutGrid, 
-  List, Zap, BarChart3, Clock, BrainCircuit, Globe, 
+  List, Zap, BarChart3, Clock, BrainCircuit, 
   ArrowRight, ArrowLeft, MoreHorizontal, MapPin, ShieldAlert,
   Loader2, Sparkles
 } from 'lucide-react';
+
+// ✅ استيراد الكونتكست العام
+import { useDashboard } from '../../layout'; 
 
 // --- Types & Interfaces ---
 type Priority = 'Critical' | 'High' | 'Medium' | 'Normal';
@@ -39,7 +42,9 @@ interface Employee {
 }
 
 export default function EnterpriseOperationsPage() {
-  const [lang, setLang] = useState<'ar' | 'en'>('ar');
+  // ✅ استخدام اللغة من النظام العام
+  const { lang } = useDashboard();
+  
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [tasks, setTasks] = useState<Task[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -58,6 +63,7 @@ export default function EnterpriseOperationsPage() {
 
   // --- Mock Data Loading ---
   useEffect(() => {
+    setLoading(true); // إعادة تفعيل اللودينج عند تغيير اللغة
     setTimeout(() => {
       setTasks([
         { 
@@ -94,7 +100,7 @@ export default function EnterpriseOperationsPage() {
       ]);
       setLoading(false);
     }, 800);
-  }, [lang]);
+  }, [lang]); // ✅ يعيد التحميل عند تغيير اللغة
 
   // --- Logic ---
   const handleAssign = (employee: Employee) => {
@@ -133,7 +139,7 @@ export default function EnterpriseOperationsPage() {
     }
   };
 
-  // 2. تحليل عام للعمليات (الزر العلوي) - تم إضافته لإصلاح المشكلة
+  // 2. تحليل عام للعمليات (الزر العلوي)
   const runGlobalAnalysis = async () => {
     setIsGlobalAiAnalyzing(true);
     setGlobalAiInsight(null);
@@ -143,7 +149,7 @@ export default function EnterpriseOperationsPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          action: 'analyze-progress', // نستخدم تحليل التقدم كتحليل عام
+          action: 'analyze-progress', 
           lang,
           data: { 
             projects: tasks.map(t => ({ name: t.title, status: t.status, priority: t.priority, risk: t.risk }))
@@ -158,8 +164,6 @@ export default function EnterpriseOperationsPage() {
       setIsGlobalAiAnalyzing(false);
     }
   };
-
-  const toggleLang = () => setLang(prev => prev === 'ar' ? 'en' : 'ar');
 
   return (
     <div className={`min-h-screen bg-slate-50 font-sans text-slate-800 ${lang === 'ar' ? 'dir-rtl' : 'dir-ltr'}`} dir={lang === 'ar' ? 'rtl' : 'ltr'}>
@@ -177,9 +181,6 @@ export default function EnterpriseOperationsPage() {
             </p>
           </div>
           <div className="flex items-center gap-3">
-             <button onClick={toggleLang} className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-200 transition">
-               <Globe size={14} /> {lang === 'ar' ? 'English' : 'عربي'}
-             </button>
              <div className="h-8 w-px bg-slate-200 mx-1"></div>
              <button className="p-2 bg-slate-100 rounded-lg text-slate-600 hover:bg-slate-200" onClick={() => setViewMode('grid')}>
                 <LayoutGrid size={18} className={viewMode === 'grid' ? 'text-blue-600' : ''} />
@@ -188,7 +189,7 @@ export default function EnterpriseOperationsPage() {
                 <List size={18} className={viewMode === 'list' ? 'text-blue-600' : ''} />
              </button>
              
-             {/* الزر العلوي: تم ربطه الآن بدالة التحليل العام */}
+             {/* الزر العلوي للتحليل العام */}
              <button 
                 onClick={runGlobalAnalysis}
                 disabled={isGlobalAiAnalyzing}
@@ -200,7 +201,7 @@ export default function EnterpriseOperationsPage() {
           </div>
         </div>
 
-        {/* Global Insight Box (يظهر عند ضغط الزر العلوي) */}
+        {/* Global Insight Box */}
         {globalAiInsight && (
             <div className="mb-6 bg-gradient-to-r from-blue-50 to-indigo-50 p-4 rounded-xl border border-blue-100 flex items-start gap-3 animate-in slide-in-from-top-2">
                 <div className="p-2 bg-white rounded-lg text-blue-600 shadow-sm"><BrainCircuit size={18}/></div>
@@ -208,7 +209,9 @@ export default function EnterpriseOperationsPage() {
                     <h4 className="text-xs font-bold text-blue-800 mb-1">{lang === 'ar' ? 'رؤية النظام الذكية:' : 'System AI Insight:'}</h4>
                     <p className="text-sm text-slate-700 font-medium leading-relaxed">{globalAiInsight}</p>
                 </div>
-                <button onClick={() => setGlobalAiInsight(null)} className="mr-auto text-slate-400 hover:text-slate-600"><ArrowLeft size={16}/></button>
+                <button onClick={() => setGlobalAiInsight(null)} className="mr-auto text-slate-400 hover:text-slate-600">
+                    {lang === 'ar' ? <ArrowLeft size={16}/> : <ArrowRight size={16}/>}
+                </button>
             </div>
         )}
 
@@ -443,14 +446,6 @@ function FilterSelect({ label }: { label: string }) {
         <button className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition">
             {label} <ChevronDown size={14} />
         </button>
-    );
-}
-
-function SparklesIcon() {
-    return (
-        <div className="p-1.5 bg-white rounded-lg border border-purple-100 text-purple-600 h-fit">
-            <BrainCircuit size={16} />
-        </div>
     );
 }
 

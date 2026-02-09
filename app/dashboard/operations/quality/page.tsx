@@ -3,10 +3,11 @@
 import { useState, useEffect } from 'react';
 import { 
   ClipboardCheck, CheckCircle2, XCircle, AlertTriangle, 
-  Search, Filter, ChevronDown, FileText, Eye, AlertOctagon, 
-  Activity, BarChart3, Calendar, User, ShieldAlert, Check, X,
-  ArrowRightLeft, History, FileBadge, Globe
+  Search, Filter, FileText, Eye, AlertOctagon, 
+  Activity, Calendar, User, ShieldAlert, X, FileBadge, Globe
 } from 'lucide-react';
+// ✅ استيراد الكونتكست العام
+import { useDashboard } from '../../layout';
 
 // --- Types ---
 type InspectionStatus = 'Scheduled' | 'Conducted' | 'Under Review' | 'Passed' | 'Failed' | 'Closed';
@@ -28,7 +29,9 @@ interface Inspection {
 }
 
 export default function QualityPage() {
-  const [lang, setLang] = useState<'ar' | 'en'>('ar');
+  // ✅ استخدام اللغة من النظام العام
+  const { lang } = useDashboard();
+  
   const [activeTab, setActiveTab] = useState<'All' | InspectionStatus>('All');
   const [inspections, setInspections] = useState<Inspection[]>([]);
   const [loading, setLoading] = useState(true);
@@ -39,36 +42,46 @@ export default function QualityPage() {
 
   // --- Mock Data ---
   useEffect(() => {
+    setLoading(true); // إعادة تفعيل اللودينج عند تغيير اللغة
     setTimeout(() => {
       setInspections([
         { 
-          id: 'INS-2024-101', project: 'مشروع الورود', type: 'فحص قوة الخرسانة', 
-          status: 'Passed', inspector: 'م. عمر فاروق', date: '2024-02-05', score: 98,
-          standards: 'ASTM C39 / SASO 202', notes: 'النتائج مطابقة للمواصفات القياسية. العينات تجاوزت الحد الأدنى للتحمل.',
+          id: 'INS-2024-101', project: lang === 'ar' ? 'مشروع الورود' : 'Al-Wurud Project', 
+          type: lang === 'ar' ? 'فحص قوة الخرسانة' : 'Concrete Strength Test', 
+          status: 'Passed', inspector: 'Eng. Omar Farouk', date: '2024-02-05', score: 98,
+          standards: 'ASTM C39 / SASO 202', 
+          notes: lang === 'ar' ? 'النتائج مطابقة للمواصفات القياسية. العينات تجاوزت الحد الأدنى للتحمل.' : 'Results compliant with standards. Samples exceeded minimum endurance.',
           attachments: 3 
         },
         { 
-          id: 'INS-2024-102', project: 'تمديدات الكهرباء', type: 'اختبار الجهد العالي', 
-          status: 'Failed', inspector: 'سعيد القحطاني', date: '2024-02-04', score: 45, severity: 'Critical',
-          standards: 'IEC 60502 / SEC Standards', notes: 'انخفاض حاد في العزل عند النقطة ب. خطر التماس كهربائي.',
-          attachments: 5, correctiveAction: 'استبدال الكابل المتضرر بالكامل وإعادة الفحص.'
+          id: 'INS-2024-102', project: lang === 'ar' ? 'تمديدات الكهرباء' : 'Electrical Wiring', 
+          type: lang === 'ar' ? 'اختبار الجهد العالي' : 'High Voltage Test', 
+          status: 'Failed', inspector: 'Saeed Al-Qahtani', date: '2024-02-04', score: 45, severity: 'Critical',
+          standards: 'IEC 60502 / SEC Standards', 
+          notes: lang === 'ar' ? 'انخفاض حاد في العزل عند النقطة ب. خطر التماس كهربائي.' : 'Severe insulation drop at point B. Short circuit risk.',
+          attachments: 5, 
+          correctiveAction: lang === 'ar' ? 'استبدال الكابل المتضرر بالكامل وإعادة الفحص.' : 'Replace damaged cable and re-test.'
         },
         { 
-          id: 'INS-2024-103', project: 'محطة الضخ', type: 'فحص سلامة المعدات', 
-          status: 'Under Review', inspector: 'ياسر الحربي', date: '2024-02-03', score: 75, severity: 'Medium',
-          standards: 'OSHA 1910 / ISO 45001', notes: 'بعض صمامات الأمان تحتاج لمعايرة. تم طلب تقرير المعايرة من المقاول.',
+          id: 'INS-2024-103', project: lang === 'ar' ? 'محطة الضخ' : 'Pumping Station', 
+          type: lang === 'ar' ? 'فحص سلامة المعدات' : 'Equipment Safety Check', 
+          status: 'Under Review', inspector: 'Yasser Al-Harbi', date: '2024-02-03', score: 75, severity: 'Medium',
+          standards: 'OSHA 1910 / ISO 45001', 
+          notes: lang === 'ar' ? 'بعض صمامات الأمان تحتاج لمعايرة. تم طلب تقرير المعايرة من المقاول.' : 'Some safety valves need calibration. Calibration report requested.',
           attachments: 2 
         },
         { 
-          id: 'INS-2024-104', project: 'مشروع الاتصالات', type: 'فحص الألياف الضوئية', 
-          status: 'Scheduled', inspector: 'محمد علي', date: '2024-02-10', score: 0,
-          standards: 'ITU-T G.652', notes: 'موعد الفحص المجدول.',
+          id: 'INS-2024-104', project: lang === 'ar' ? 'مشروع الاتصالات' : 'Telecom Project', 
+          type: lang === 'ar' ? 'فحص الألياف الضوئية' : 'Fiber Optic Check', 
+          status: 'Scheduled', inspector: 'Mohammed Ali', date: '2024-02-10', score: 0,
+          standards: 'ITU-T G.652', 
+          notes: lang === 'ar' ? 'موعد الفحص المجدول.' : 'Scheduled inspection date.',
           attachments: 0 
         },
       ]);
       setLoading(false);
     }, 600);
-  }, []);
+  }, [lang]); // ✅ التحديث عند تغيير اللغة
 
   // --- Actions ---
   const handleDownloadReport = () => {
@@ -91,14 +104,12 @@ export default function QualityPage() {
   };
 
   // --- Helpers ---
-  const toggleLang = () => setLang(prev => prev === 'ar' ? 'en' : 'ar');
-
   const getStatusBadge = (status: InspectionStatus) => {
     switch(status) {
-        case 'Passed': return <span className="flex items-center gap-1.5 text-green-700 bg-green-50 px-3 py-1 rounded-lg text-xs font-bold border border-green-200"><CheckCircle2 size={14}/> ناجح</span>;
-        case 'Failed': return <span className="flex items-center gap-1.5 text-red-700 bg-red-50 px-3 py-1 rounded-lg text-xs font-bold border border-red-200"><XCircle size={14}/> راسب</span>;
-        case 'Under Review': return <span className="flex items-center gap-1.5 text-amber-700 bg-amber-50 px-3 py-1 rounded-lg text-xs font-bold border border-amber-200"><AlertTriangle size={14}/> قيد المراجعة</span>;
-        case 'Scheduled': return <span className="flex items-center gap-1.5 text-blue-700 bg-blue-50 px-3 py-1 rounded-lg text-xs font-bold border border-blue-200"><Calendar size={14}/> مجدول</span>;
+        case 'Passed': return <span className="flex items-center gap-1.5 text-green-700 bg-green-50 px-3 py-1 rounded-lg text-xs font-bold border border-green-200"><CheckCircle2 size={14}/> {lang === 'ar' ? 'ناجح' : 'Passed'}</span>;
+        case 'Failed': return <span className="flex items-center gap-1.5 text-red-700 bg-red-50 px-3 py-1 rounded-lg text-xs font-bold border border-red-200"><XCircle size={14}/> {lang === 'ar' ? 'راسب' : 'Failed'}</span>;
+        case 'Under Review': return <span className="flex items-center gap-1.5 text-amber-700 bg-amber-50 px-3 py-1 rounded-lg text-xs font-bold border border-amber-200"><AlertTriangle size={14}/> {lang === 'ar' ? 'قيد المراجعة' : 'Under Review'}</span>;
+        case 'Scheduled': return <span className="flex items-center gap-1.5 text-blue-700 bg-blue-50 px-3 py-1 rounded-lg text-xs font-bold border border-blue-200"><Calendar size={14}/> {lang === 'ar' ? 'مجدول' : 'Scheduled'}</span>;
         default: return <span className="flex items-center gap-1.5 text-slate-700 bg-slate-50 px-3 py-1 rounded-lg text-xs font-bold border border-slate-200"><Activity size={14}/> {status}</span>;
     }
   };
@@ -131,10 +142,7 @@ export default function QualityPage() {
             </p>
           </div>
           <div className="flex gap-2">
-             <button onClick={toggleLang} className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-200 transition">
-               <Globe size={14} /> {lang === 'ar' ? 'English' : 'عربي'}
-             </button>
-             {/* زر تقرير الجودة - تم تفعيله */}
+             {/* تم إزالة زر تبديل اللغة */}
              <button 
                 onClick={handleDownloadReport}
                 className="bg-slate-900 text-white px-5 py-2 rounded-xl font-bold text-sm hover:bg-slate-800 shadow-lg flex items-center gap-2 transition active:scale-95"
@@ -288,7 +296,7 @@ export default function QualityPage() {
                             </h4>
                             <p className="text-sm text-red-700 leading-relaxed">{selectedInspection.correctiveAction}</p>
                             
-                            {/* زر إنشاء NCR - تم تفعيله */}
+                            {/* زر إنشاء NCR */}
                             <button 
                                 onClick={handleCreateNCR}
                                 className="mt-3 bg-red-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-red-700 transition w-full active:scale-95"
@@ -311,24 +319,6 @@ export default function QualityPage() {
                             {selectedInspection.attachments === 0 && <span className="text-xs text-slate-400 italic">No attachments</span>}
                         </div>
                     </div>
-
-                    {/* History Log */}
-                    <div className="pt-4 border-t border-slate-100">
-                        <div className="flex items-center gap-2 text-xs text-slate-400 mb-3">
-                            <History size={12}/> {lang === 'ar' ? 'سجل الحوكمة' : 'Governance Log'}
-                        </div>
-                        <div className="space-y-3">
-                            <div className="flex gap-3 text-xs">
-                                <div className="font-mono text-slate-400">10:30 AM</div>
-                                <div className="text-slate-600"><span className="font-bold">System:</span> Validation check passed.</div>
-                            </div>
-                            <div className="flex gap-3 text-xs">
-                                <div className="font-mono text-slate-400">09:15 AM</div>
-                                <div className="text-slate-600"><span className="font-bold">{selectedInspection.inspector}:</span> Inspection data submitted.</div>
-                            </div>
-                        </div>
-                    </div>
-
                 </div>
 
                 {/* Footer Actions */}
@@ -337,7 +327,6 @@ export default function QualityPage() {
                         {lang === 'ar' ? 'إغلاق' : 'Close'}
                     </button>
                     
-                    {/* أزرار الرفض والاعتماد - تم تفعيلها */}
                     {selectedInspection.status === 'Under Review' && (
                         <>
                             <button 

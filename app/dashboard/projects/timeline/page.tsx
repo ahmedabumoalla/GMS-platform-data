@@ -4,9 +4,12 @@ import { useState, useEffect } from 'react';
 import { 
   Calendar, Clock, Flag, MapPin, ChevronLeft, ChevronRight, 
   Filter, Search, ZoomIn, ZoomOut, AlertTriangle, CheckCircle, 
-  GitCommit, Layers, MoreHorizontal, BrainCircuit, Globe,
-  ArrowRight, ArrowLeft, BarChart3
+  GitCommit, Layers, MoreHorizontal, BrainCircuit,
+  ArrowRight, ArrowLeft, BarChart3, Loader2
 } from 'lucide-react';
+
+// ✅ استيراد الكونتكست العام
+import { useDashboard } from '../../layout'; 
 
 // --- Types ---
 type EventStatus = 'On Track' | 'At Risk' | 'Delayed' | 'Critical' | 'Completed';
@@ -29,7 +32,9 @@ interface TimelineEvent {
 }
 
 export default function EnterpriseTimelinePage() {
-  const [lang, setLang] = useState<'ar' | 'en'>('ar');
+  // ✅ استخدام اللغة من النظام العام
+  const { lang } = useDashboard();
+  
   const [selectedView, setSelectedView] = useState<'Vertical' | 'Gantt'>('Vertical');
   const [currentDate, setCurrentDate] = useState(new Date());
   const [events, setEvents] = useState<TimelineEvent[]>([]);
@@ -39,6 +44,7 @@ export default function EnterpriseTimelinePage() {
 
   // --- Mock Data ---
   useEffect(() => {
+    setLoading(true); // إعادة تفعيل اللودينج عند تغيير اللغة
     setTimeout(() => {
       setEvents([
         { 
@@ -75,11 +81,9 @@ export default function EnterpriseTimelinePage() {
       ]);
       setLoading(false);
     }, 800);
-  }, [lang]);
+  }, [lang]); // ✅ التحديث عند تغيير اللغة
 
   // --- Logic ---
-  const toggleLang = () => setLang(prev => prev === 'ar' ? 'en' : 'ar');
-
   const runAiAnalysis = () => {
     setIsAiAnalyzing(true);
     setTimeout(() => {
@@ -128,9 +132,6 @@ export default function EnterpriseTimelinePage() {
           </div>
           
           <div className="flex items-center gap-3">
-             <button onClick={toggleLang} className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-200 transition">
-               <Globe size={14} /> {lang === 'ar' ? 'English' : 'عربي'}
-             </button>
              <div className="h-8 w-px bg-slate-200 mx-1"></div>
              
              {/* Date Navigation */}
@@ -142,11 +143,12 @@ export default function EnterpriseTimelinePage() {
                 <button className="p-1.5 hover:bg-white rounded-lg transition shadow-sm"><ChevronLeft size={18} /></button>
              </div>
 
+             {/* زر التحليل الذكي */}
              <button 
                 onClick={runAiAnalysis}
                 className="bg-slate-900 text-white px-5 py-2.5 rounded-xl font-bold text-sm hover:bg-slate-800 shadow-lg shadow-slate-200 transition flex items-center gap-2"
              >
-                <BrainCircuit size={16} className={isAiAnalyzing ? 'animate-pulse' : ''} /> 
+                {isAiAnalyzing ? <Loader2 size={16} className="animate-spin" /> : <BrainCircuit size={16} className={isAiAnalyzing ? 'animate-pulse' : ''} />}
                 {isAiAnalyzing ? (lang === 'ar' ? 'جاري التحليل...' : 'Analyzing...') : (lang === 'ar' ? 'كشف التعارضات الذكي' : 'AI Conflict Detection')}
              </button>
           </div>
@@ -179,6 +181,9 @@ export default function EnterpriseTimelinePage() {
             <div className="mt-4 bg-gradient-to-r from-amber-50 to-orange-50 p-4 rounded-xl border border-amber-100 flex items-start gap-3 animate-in slide-in-from-top-2">
                 <div className="p-2 bg-white rounded-lg text-amber-600 shadow-sm"><AlertTriangle size={18}/></div>
                 <p className="text-sm text-slate-700 font-medium leading-relaxed mt-1">{aiInsight}</p>
+                <button onClick={() => setAiInsight(null)} className="mr-auto text-slate-400 hover:text-slate-600">
+                    {lang === 'ar' ? <ArrowLeft size={16}/> : <ArrowRight size={16}/>}
+                </button>
             </div>
         )}
       </div>

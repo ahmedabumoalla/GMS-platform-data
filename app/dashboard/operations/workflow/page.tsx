@@ -2,347 +2,386 @@
 
 import { useState, useEffect } from 'react';
 import { 
-  MoreHorizontal, Plus, Search, Filter, AlertTriangle, 
-  CheckCircle2, Clock, PlayCircle, StopCircle, BrainCircuit, 
-  Loader2, Globe, LayoutGrid, List, X, ArrowRight, ShieldCheck, User
+  CheckCircle2, Clock, AlertTriangle, Camera, Mic, 
+  Send, MapPin, FileText, ChevronDown, ChevronUp, Globe, 
+  Briefcase, Save, ShieldAlert, Sparkles, Loader2, X, 
+  UploadCloud, Lock, Check, Calendar
 } from 'lucide-react';
 
-// --- Types ---
-type TaskStatus = 'Pending' | 'In Progress' | 'Review' | 'Completed';
-type Priority = 'High' | 'Medium' | 'Low';
+// ✅ استيراد الكونتكست العام
+import { useDashboard } from '../../layout'; 
 
-interface WorkflowTask {
+// --- Types & Interfaces ---
+type StatusType = 'Not Started' | 'In Progress' | 'Completed' | 'Blocked' | 'Delayed';
+type RiskLevel = 'Low' | 'Medium' | 'High' | 'Critical';
+
+interface Task {
   id: string;
   title: string;
   project: string;
-  assignee: string;
-  priority: Priority;
-  deadline: string;
-  status: TaskStatus;
-  progress: number;
-  isBlocked?: boolean;
-  description?: string; // تفاصيل إضافية
+  projectId: string;
+  location: string;
+  dueDate: string;
+  currentSystemProgress: number; // Read-only from backend
 }
 
-interface Column {
-  id: TaskStatus;
-  title: string;
-  color: string;
-  icon: any;
-}
-
-export default function EnterpriseWorkflowPage() {
-  const [lang, setLang] = useState<'ar' | 'en'>('ar');
-  const [tasks, setTasks] = useState<WorkflowTask[]>([]);
-  const [loading, setLoading] = useState(true);
+export default function EnterpriseFieldUpdatePage() {
+  // ✅ استخدام اللغة من النظام العام
+  const { lang } = useDashboard();
   
-  // AI States
+  const [activeTask, setActiveTask] = useState<string | null>(null);
+  
+  // AI & Processing States
   const [isAiAnalyzing, setIsAiAnalyzing] = useState(false);
-  const [aiInsight, setAiInsight] = useState<string | null>(null);
-
-  // Task Details Modal State
-  const [selectedTask, setSelectedTask] = useState<WorkflowTask | null>(null);
+  const [aiInsight, setAiInsight] = useState<{type: 'warning' | 'success', msg: string} | null>(null);
+  
+  // Reporting Form State (Reset when task changes in real app)
+  const [status, setStatus] = useState<StatusType>('In Progress');
+  const [delayReason, setDelayReason] = useState('');
+  const [notes, setNotes] = useState('');
+  const [risk, setRisk] = useState<RiskLevel>('Low');
+  const [attachments, setAttachments] = useState<string[]>([]);
+  
+  const [tasks, setTasks] = useState<Task[]>([]);
 
   // --- Mock Data ---
   useEffect(() => {
-    setTimeout(() => {
-      setTasks([
-        { 
-          id: 'T-101', title: lang === 'ar' ? 'طلب مواد أولية' : 'Material Request', 
-          project: 'Project A', assignee: 'Ahmed', priority: 'High', deadline: '2024-02-20', status: 'Pending', progress: 0, isBlocked: true,
-          description: lang === 'ar' ? 'مطلوب توريد كابلات ضغط عالي للموقع رقم 3. الطلب معلق بانتظار موافقة المشتريات.' : 'HV cables supply required for Site 3. Request pending procurement approval.'
-        },
-        { 
-          id: 'T-102', title: lang === 'ar' ? 'حفر الأساسات - قطاع 4' : 'Excavation Sector 4', 
-          project: 'Project B', assignee: 'Saeed', priority: 'Medium', deadline: '2024-02-25', status: 'In Progress', progress: 45,
-          description: lang === 'ar' ? 'أعمال الحفر مستمرة حسب الجدول. تم إنجاز 45% من المنطقة المحددة.' : 'Excavation ongoing as per schedule. 45% of designated area completed.'
-        },
-        { 
-          id: 'T-103', title: lang === 'ar' ? 'اختبار الضغط' : 'Pressure Test', 
-          project: 'Project C', assignee: 'Omar', priority: 'High', deadline: '2024-02-15', status: 'Review', progress: 90,
-          description: lang === 'ar' ? 'تم الانتهاء من الاختبار الأولي. بانتظار مراجعة مهندس الجودة للاعتماد النهائي.' : 'Initial test completed. Waiting for QA engineer final approval.'
-        },
-        { 
-          id: 'T-104', title: lang === 'ar' ? 'تسليم الموقع أ' : 'Site Handover A', 
-          project: 'Project A', assignee: 'Yasser', priority: 'Low', deadline: '2024-02-10', status: 'Completed', progress: 100,
-          description: lang === 'ar' ? 'تم تسليم الموقع للعميل واستلام محضر الاستلام.' : 'Site handed over to client and handover minutes received.'
-        },
-        { 
-          id: 'T-105', title: lang === 'ar' ? 'تمديد الكابلات' : 'Cable Laying', 
-          project: 'Project B', assignee: 'Team 2', priority: 'Medium', deadline: '2024-03-01', status: 'In Progress', progress: 60,
-          description: lang === 'ar' ? 'جاري تمديد الكابلات في المسارات الرئيسية.' : 'Laying cables in main tracks.'
-        },
-      ]);
-      setLoading(false);
-    }, 800);
-  }, [lang]);
+    setTasks([
+      { 
+        id: 'TSK-2024-101', 
+        title: lang === 'ar' ? 'تركيب العدادات الذكية - قطاع 4' : 'Smart Meter Installation - Sector 4', 
+        project: lang === 'ar' ? 'مشروع البنية التحتية للكهرباء' : 'Electrical Infrastructure Project', 
+        projectId: 'PRJ-ELEC-04',
+        location: 'Riyadh, Al-Malqa', 
+        dueDate: '2024-02-25',
+        currentSystemProgress: 65 
+      },
+      { 
+        id: 'TSK-2024-102', 
+        title: lang === 'ar' ? 'فحص جودة التمديدات الأرضية' : 'Underground Cabling QA Inspection', 
+        project: lang === 'ar' ? 'مشروع شبكات المياه' : 'Water Network Project', 
+        projectId: 'PRJ-WATER-09',
+        location: 'Jeddah, North Obhur', 
+        dueDate: '2024-02-28',
+        currentSystemProgress: 40 
+      },
+    ]);
+  }, [lang]); // ✅ التحديث عند تغيير اللغة
 
-  const columns: Column[] = [
-    { id: 'Pending', title: lang === 'ar' ? 'قيد الانتظار' : 'Pending', color: 'bg-slate-100 border-slate-200', icon: Clock },
-    { id: 'In Progress', title: lang === 'ar' ? 'جاري التنفيذ' : 'In Progress', color: 'bg-blue-50 border-blue-100', icon: PlayCircle },
-    { id: 'Review', title: lang === 'ar' ? 'المراجعة والجودة' : 'Review & QA', color: 'bg-purple-50 border-purple-100', icon: CheckCircle2 },
-    { id: 'Completed', title: lang === 'ar' ? 'تم الإنجاز' : 'Completed', color: 'bg-green-50 border-green-100', icon: StopCircle },
-  ];
-
-  // --- Actions ---
-  const handleTaskAction = (action: string) => {
-    if (!selectedTask) return;
-
-    let newStatus = selectedTask.status;
-    let newProgress = selectedTask.progress;
-
-    if (action === 'start') { newStatus = 'In Progress'; newProgress = 10; }
-    if (action === 'submit_review') { newStatus = 'Review'; newProgress = 90; }
-    if (action === 'approve') { newStatus = 'Completed'; newProgress = 100; }
-    if (action === 'reject') { newStatus = 'In Progress'; newProgress = 50; } // إعادة للعمل
-
-    setTasks(tasks.map(t => t.id === selectedTask.id ? { ...t, status: newStatus, progress: newProgress } : t));
-    setSelectedTask(null); // إغلاق النافذة
-  };
-
-  const runAiAnalysis = async () => {
+  // --- Handlers ---
+  const handleAiValidation = () => {
     setIsAiAnalyzing(true);
     setAiInsight(null);
-    try {
-      const response = await fetch('/api/ai-assistant', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'analyze-progress',
-          lang,
-          data: { projects: tasks.map(t => ({ name: t.title, status: t.status, priority: t.priority, risk: t.isBlocked ? 'High' : 'Low' })) }
-        })
-      });
-      const data = await response.json();
-      setAiInsight(data.result);
-    } catch (error) {
-      console.error(error);
-      setAiInsight(lang === 'ar' ? 'فشل الاتصال بالذكاء الاصطناعي' : 'AI Connection Failed');
-    } finally {
+    
+    // Simulate AI Logic
+    setTimeout(() => {
       setIsAiAnalyzing(false);
-    }
+      if (status === 'Delayed' && !delayReason) {
+        setAiInsight({
+            type: 'warning',
+            msg: lang === 'ar' ? 'تنبيه: يجب تحديد سبب التأخير لإكمال التقرير.' : 'Alert: Delay reason is mandatory for this status.'
+        });
+      } else if (notes.length < 20) {
+        setAiInsight({
+            type: 'warning',
+            msg: lang === 'ar' ? 'الملاحظات قصيرة جداً. يرجى إضافة تفاصيل فنية لضمان الامتثال.' : 'Notes are too brief. Please add technical details for compliance.'
+        });
+      } else {
+        setAiInsight({
+            type: 'success',
+            msg: lang === 'ar' ? 'التقرير مكتمل ومتوافق مع المعايير. جاهز للإرسال.' : 'Report is complete and compliant. Ready to submit.'
+        });
+      }
+    }, 1500);
   };
 
-  const toggleLang = () => setLang(prev => prev === 'ar' ? 'en' : 'ar');
-
-  const getPriorityColor = (p: Priority) => {
-    if (p === 'High') return 'bg-red-100 text-red-700';
-    if (p === 'Medium') return 'bg-amber-100 text-amber-700';
-    return 'bg-blue-100 text-blue-700';
+  const handleFileUpload = () => {
+    setAttachments(prev => [...prev, `IMG_${Math.floor(Math.random() * 1000)}.jpg`]);
   };
 
   return (
-    <div className={`h-[calc(100vh-100px)] flex flex-col bg-slate-50 ${lang === 'ar' ? 'dir-rtl' : 'dir-ltr'}`} dir={lang === 'ar' ? 'rtl' : 'ltr'}>
+    <div className={`min-h-screen bg-slate-50 font-sans text-slate-800 ${lang === 'ar' ? 'dir-rtl' : 'dir-ltr'}`} dir={lang === 'ar' ? 'rtl' : 'ltr'}>
       
-      {/* Header */}
-      <div className="bg-white border-b border-slate-200 px-6 py-4 flex-shrink-0">
-        <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-4">
+      {/* --- Section 1: Reporting Context Header --- */}
+      <header className="bg-white border-b border-slate-200 px-6 py-4 sticky top-0 z-30 shadow-sm">
+        <div className="max-w-4xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
           <div>
             <h1 className="text-xl font-black text-slate-900 flex items-center gap-2">
-              <LayoutGrid className="text-blue-600" />
-              {lang === 'ar' ? 'لوحة التحكم في سير العمل' : 'Operational Workflow Board'}
+              <FileText className="text-blue-600" />
+              {lang === 'ar' ? 'تحديث التنفيذ الميداني' : 'Field Execution Update'}
             </h1>
-            <p className="text-xs text-slate-500 font-medium mt-1">
-              {lang === 'ar' ? 'مراقبة حالة التنفيذ والتقدم الميداني لحظياً' : 'Real-time field execution monitoring and status'}
+            <p className="text-xs text-slate-500 font-medium flex items-center gap-2 mt-1">
+              <span>Eng. Ahmed Al-Ghamdi (Field Supervisor)</span>
+              <span className="w-1 h-1 bg-slate-300 rounded-full"></span>
+              <span className="text-green-600 flex items-center gap-1 bg-green-50 px-2 py-0.5 rounded-full border border-green-100">
+                <MapPin size={10} /> GPS Verified
+              </span>
             </p>
           </div>
+          {/* تم إزالة زر تغيير اللغة */}
+        </div>
+      </header>
+
+      <main className="max-w-4xl mx-auto p-6 space-y-6">
+        
+        {/* Task Selection List */}
+        <div className="space-y-4">
+          <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider px-1">
+            {lang === 'ar' ? 'المهام المسندة الحالية' : 'Current Assigned Tasks'}
+          </h2>
           
-          <div className="flex items-center gap-3">
-             <button onClick={toggleLang} className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-200 transition">
-               <Globe size={14} /> {lang === 'ar' ? 'English' : 'عربي'}
-             </button>
-             <div className="h-8 w-px bg-slate-200 mx-1"></div>
-             <button 
-                onClick={runAiAnalysis}
-                disabled={isAiAnalyzing}
-                className="bg-slate-900 text-white px-4 py-2 rounded-xl font-bold text-xs hover:bg-slate-800 shadow-lg shadow-slate-200 transition flex items-center gap-2"
-             >
-                {isAiAnalyzing ? <Loader2 size={14} className="animate-spin"/> : <BrainCircuit size={14} />} 
-                {lang === 'ar' ? 'تحليل الاختناقات' : 'Analyze Bottlenecks'}
-             </button>
-          </div>
-        </div>
+          {tasks.map(task => (
+            <div key={task.id} className={`bg-white rounded-2xl border shadow-sm overflow-hidden transition-all duration-300 ${activeTask === task.id ? 'border-blue-300 ring-4 ring-blue-50' : 'border-slate-200'}`}>
+              
+              {/* Task Summary Card (Clickable) */}
+              <div 
+                onClick={() => setActiveTask(activeTask === task.id ? null : task.id)}
+                className={`p-5 flex justify-between items-center cursor-pointer transition ${activeTask === task.id ? 'bg-slate-50 border-b border-slate-100' : 'hover:bg-slate-50'}`}
+              >
+                <div className="flex items-center gap-4">
+                    <div className={`p-3 rounded-xl flex flex-col items-center justify-center w-14 h-14 ${activeTask === task.id ? 'bg-blue-600 text-white shadow-md' : 'bg-slate-100 text-slate-500'}`}>
+                        <Briefcase size={20} />
+                    </div>
+                    <div>
+                        <div className="flex items-center gap-2 mb-1">
+                            <span className="text-[10px] font-mono bg-slate-100 px-2 py-0.5 rounded text-slate-500">{task.id}</span>
+                            <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded">{task.projectId}</span>
+                        </div>
+                        <h3 className={`font-bold text-lg leading-tight ${activeTask === task.id ? 'text-blue-700' : 'text-slate-800'}`}>{task.title}</h3>
+                        <div className="flex items-center gap-3 text-xs text-slate-500 mt-1">
+                            <span className="flex items-center gap-1"><MapPin size={12}/> {task.location}</span>
+                            <span className="flex items-center gap-1"><Calendar size={12}/> {task.dueDate}</span>
+                        </div>
+                    </div>
+                </div>
+                {activeTask === task.id ? <ChevronUp className="text-blue-600" /> : <ChevronDown className="text-slate-400" />}
+              </div>
 
-        {/* AI Insight */}
-        {aiInsight && (
-            <div className="bg-gradient-to-r from-indigo-50 to-blue-50 p-3 rounded-xl border border-indigo-100 flex items-start gap-3 animate-in slide-in-from-top-2 mb-4">
-                <BrainCircuit size={16} className="text-indigo-600 shrink-0 mt-0.5"/>
-                <p className="text-xs text-slate-700 font-medium leading-relaxed">{aiInsight}</p>
-            </div>
-        )}
+              {/* Extended Reporting Form */}
+              {activeTask === task.id && (
+                <div className="p-6 space-y-8 animate-in slide-in-from-top-4 duration-300">
+                  
+                  {/* Section 1: System Calculated Progress (Read-Only) */}
+                  <div className="bg-slate-900 rounded-xl p-5 text-white flex items-center justify-between shadow-lg relative overflow-hidden">
+                    <div className="absolute right-0 top-0 w-32 h-32 bg-white/5 rounded-full -mr-10 -mt-10 blur-3xl"></div>
+                    <div className="relative z-10">
+                        <div className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-1 flex items-center gap-2">
+                            <Lock size={12} /> {lang === 'ar' ? 'نسبة الإنجاز المحسوبة (نظامياً)' : 'System Calculated Progress'}
+                        </div>
+                        <div className="text-3xl font-black">{task.currentSystemProgress}%</div>
+                    </div>
+                    <div className="h-16 w-16 relative z-10">
+                        <svg className="w-full h-full transform -rotate-90">
+                            <circle cx="32" cy="32" r="28" stroke="currentColor" strokeWidth="6" fill="transparent" className="text-slate-700" />
+                            <circle cx="32" cy="32" r="28" stroke="currentColor" strokeWidth="6" fill="transparent" 
+                                strokeDasharray={175} strokeDashoffset={175 - (175 * task.currentSystemProgress) / 100}
+                                className="text-emerald-400 transition-all duration-1000 ease-out" 
+                            />
+                        </svg>
+                    </div>
+                  </div>
 
-        {/* Filters */}
-        <div className="flex gap-3 items-center">
-            <div className="relative flex-1 max-w-sm">
-                <Search className="absolute right-3 top-2.5 text-slate-400 w-4 h-4" />
-                <input type="text" placeholder={lang === 'ar' ? 'بحث عن مهمة...' : 'Search task...'} className="w-full bg-slate-50 border border-slate-200 rounded-xl pr-10 pl-4 py-2 text-xs outline-none focus:border-blue-500 transition" />
-            </div>
-            <button className="p-2 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 text-slate-500">
-                <Filter size={16} />
-            </button>
-        </div>
-      </div>
+                  {/* Section 2: Task Status Update */}
+                  <div className="space-y-4">
+                    <SectionLabel title={lang === 'ar' ? 'تحديث حالة المهمة' : 'Task Status Update'} />
+                    
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                        <StatusButton 
+                            label={lang === 'ar' ? 'قيد التنفيذ' : 'In Progress'} 
+                            active={status === 'In Progress'} 
+                            onClick={() => setStatus('In Progress')} 
+                            icon={Clock} color="blue" 
+                        />
+                        <StatusButton 
+                            label={lang === 'ar' ? 'مكتمل' : 'Completed'} 
+                            active={status === 'Completed'} 
+                            onClick={() => setStatus('Completed')} 
+                            icon={CheckCircle2} color="green" 
+                        />
+                        <StatusButton 
+                            label={lang === 'ar' ? 'متوقف/محظور' : 'Blocked'} 
+                            active={status === 'Blocked'} 
+                            onClick={() => setStatus('Blocked')} 
+                            icon={X} color="red" 
+                        />
+                        <StatusButton 
+                            label={lang === 'ar' ? 'متأخر' : 'Delayed'} 
+                            active={status === 'Delayed'} 
+                            onClick={() => setStatus('Delayed')} 
+                            icon={AlertTriangle} color="amber" 
+                        />
+                    </div>
 
-      {/* Kanban Board */}
-      <div className="flex-1 overflow-x-auto overflow-y-hidden p-6">
-        {loading ? (
-            <div className="h-full flex items-center justify-center text-slate-400 animate-pulse">{lang === 'ar' ? 'جاري تحميل البيانات...' : 'Loading workflow data...'}</div>
-        ) : (
-            <div className="flex gap-6 min-w-[1000px] h-full">
-                {columns.map(col => {
-                    const colTasks = tasks.filter(t => t.status === col.id);
-                    return (
-                        <div key={col.id} className="flex-1 flex flex-col w-72 bg-slate-50/50 rounded-2xl border border-slate-200 h-full">
-                            
-                            {/* Column Header */}
-                            <div className={`p-4 border-b border-slate-200 bg-white rounded-t-2xl flex justify-between items-center sticky top-0 z-10`}>
-                                <div className="flex items-center gap-2">
-                                    <col.icon size={16} className="text-slate-500"/>
-                                    <span className="font-bold text-slate-700 text-sm">{col.title}</span>
-                                </div>
-                                <span className="bg-slate-100 px-2 py-0.5 rounded text-xs font-bold text-slate-600">{colTasks.length}</span>
+                    {/* Conditional Delay Reason */}
+                    {(status === 'Delayed' || status === 'Blocked') && (
+                        <div className="animate-in fade-in zoom-in duration-200">
+                            <label className="text-xs font-bold text-red-600 mb-2 block">
+                                {lang === 'ar' ? 'سبب التأخير / التوقف (إلزامي)*' : 'Reason for Delay/Blockage (Mandatory)*'}
+                            </label>
+                            <select 
+                                className="w-full bg-red-50 border border-red-200 text-slate-700 text-sm rounded-xl px-4 py-3 outline-none focus:border-red-500 transition"
+                                value={delayReason}
+                                onChange={(e) => setDelayReason(e.target.value)}
+                            >
+                                <option value="">{lang === 'ar' ? '-- اختر السبب --' : '-- Select Reason --'}</option>
+                                <option value="material">{lang === 'ar' ? 'نقص المواد' : 'Material Shortage'}</option>
+                                <option value="access">{lang === 'ar' ? 'تعذر الوصول للموقع' : 'Site Access Issue'}</option>
+                                <option value="weather">{lang === 'ar' ? 'أحوال جوية' : 'Weather Conditions'}</option>
+                                <option value="approval">{lang === 'ar' ? 'انتظار تصريح/موافقة' : 'Pending Approval'}</option>
+                            </select>
+                        </div>
+                    )}
+                  </div>
+
+                  {/* Section 3: Execution Notes */}
+                  <div className="space-y-4">
+                    <div className="flex justify-between items-center">
+                        <SectionLabel title={lang === 'ar' ? 'سجل التنفيذ والملاحظات' : 'Execution Log & Observations'} />
+                        <button 
+                            onClick={handleAiValidation}
+                            className="text-xs font-bold text-purple-600 flex items-center gap-1 hover:bg-purple-50 px-2 py-1 rounded-lg transition"
+                        >
+                            <Sparkles size={12}/> {lang === 'ar' ? 'تدقيق بالذكاء الاصطناعي' : 'AI Audit'}
+                        </button>
+                    </div>
+                    
+                    <textarea 
+                        value={notes}
+                        onChange={(e) => setNotes(e.target.value)}
+                        className="w-full p-4 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition h-32 resize-none placeholder:text-slate-400 leading-relaxed"
+                        placeholder={lang === 'ar' 
+                            ? '• الأعمال المنجزة اليوم:\n• المشاكل التي واجهتها:\n• ملاحظات السلامة:' 
+                            : '• Work performed today:\n• Issues encountered:\n• Safety observations:'}
+                    ></textarea>
+
+                    {/* AI Feedback Area */}
+                    {isAiAnalyzing && (
+                        <div className="flex items-center gap-2 text-xs text-purple-600 animate-pulse">
+                            <Loader2 size={14} className="animate-spin"/> {lang === 'ar' ? 'جاري تحليل اكتمال التقرير...' : 'Analyzing report completeness...'}
+                        </div>
+                    )}
+                    
+                    {aiInsight && (
+                        <div className={`p-3 rounded-xl flex gap-3 animate-in fade-in zoom-in duration-300 border ${
+                            aiInsight.type === 'warning' ? 'bg-amber-50 border-amber-200 text-amber-800' : 'bg-green-50 border-green-200 text-green-800'
+                        }`}>
+                            {aiInsight.type === 'warning' ? <AlertTriangle size={18} className="shrink-0"/> : <Check size={18} className="shrink-0"/>}
+                            <p className="text-xs font-bold">{aiInsight.msg}</p>
+                        </div>
+                    )}
+                  </div>
+
+                  {/* Section 4: Evidence & Attachments */}
+                  <div className="space-y-4">
+                    <SectionLabel title={lang === 'ar' ? 'الأدلة والمرفقات (مطلوب)' : 'Evidence & Attachments (Required)'} />
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        <button onClick={handleFileUpload} className="aspect-square bg-slate-50 border-2 border-dashed border-slate-300 rounded-xl flex flex-col items-center justify-center gap-2 text-slate-400 hover:border-blue-500 hover:text-blue-500 hover:bg-blue-50 transition group">
+                            <Camera size={24} className="group-hover:scale-110 transition-transform" />
+                            <span className="text-[10px] font-bold">{lang === 'ar' ? 'التقاط صورة' : 'Take Photo'}</span>
+                        </button>
+                        <button className="aspect-square bg-slate-50 border-2 border-dashed border-slate-300 rounded-xl flex flex-col items-center justify-center gap-2 text-slate-400 hover:border-blue-500 hover:text-blue-500 hover:bg-blue-50 transition group">
+                            <UploadCloud size={24} className="group-hover:scale-110 transition-transform" />
+                            <span className="text-[10px] font-bold">{lang === 'ar' ? 'رفع ملف' : 'Upload File'}</span>
+                        </button>
+                        
+                        {/* Attachments List */}
+                        {attachments.map((file, idx) => (
+                            <div key={idx} className="aspect-square relative bg-blue-50 border border-blue-200 rounded-xl flex flex-col items-center justify-center text-blue-600 animate-in zoom-in">
+                                <FileText size={24} />
+                                <span className="text-[8px] mt-2 px-1 truncate w-full text-center font-bold">{file}</span>
+                                <div className="text-[8px] text-blue-400 mt-0.5">10:45 AM</div>
+                                <button className="absolute top-1 right-1 bg-white/50 hover:bg-red-500 hover:text-white rounded-full p-0.5 transition"><X size={12}/></button>
                             </div>
+                        ))}
+                    </div>
+                  </div>
 
-                            {/* Task List */}
-                            <div className="p-3 space-y-3 overflow-y-auto flex-1">
-                                {colTasks.map(task => (
-                                    <div 
-                                        key={task.id} 
-                                        onClick={() => setSelectedTask(task)} // جعل الكرت تفاعلي
-                                        className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm hover:shadow-md cursor-pointer hover:border-blue-300 transition group relative overflow-hidden"
+                  {/* Section 5: Risk Assessment */}
+                  <div className="space-y-4 pt-4 border-t border-slate-100">
+                    <SectionLabel title={lang === 'ar' ? 'سجل المخاطر والتصعيد' : 'Risk & Escalation Log'} />
+                    <div className="bg-white border border-slate-200 p-4 rounded-xl space-y-4">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                            <span className="text-sm font-bold text-slate-700">{lang === 'ar' ? 'مستوى الخطورة الملاحظ:' : 'Observed Risk Level:'}</span>
+                            <div className="flex bg-slate-100 rounded-lg p-1">
+                                {['Low', 'Medium', 'High', 'Critical'].map((r) => (
+                                    <button 
+                                        key={r} 
+                                        onClick={() => setRisk(r as RiskLevel)}
+                                        className={`px-4 py-1.5 rounded-md text-[10px] font-bold transition ${
+                                            risk === r 
+                                            ? r === 'High' || r === 'Critical' ? 'bg-red-500 text-white shadow-md' : 'bg-slate-800 text-white shadow-md'
+                                            : 'text-slate-500 hover:bg-slate-200'
+                                        }`}
                                     >
-                                        {/* Status Line */}
-                                        <div className={`absolute left-0 top-0 bottom-0 w-1 ${task.isBlocked ? 'bg-red-500' : 'bg-blue-500'}`}></div>
-
-                                        <div className="flex justify-between items-start mb-2 pl-2">
-                                            <span className="text-[10px] font-mono text-slate-400">{task.id}</span>
-                                            {task.isBlocked && <AlertTriangle size={14} className="text-red-500 animate-pulse"/>}
-                                        </div>
-                                        
-                                        <h4 className="text-sm font-bold text-slate-800 mb-1 pl-2 leading-snug">{task.title}</h4>
-                                        <p className="text-[10px] text-slate-500 pl-2 mb-3">{task.project}</p>
-
-                                        {/* Metrics */}
-                                        <div className="pl-2 flex items-center justify-between text-[10px] text-slate-500 border-t border-slate-50 pt-2">
-                                            <span className={`px-1.5 py-0.5 rounded font-bold ${getPriorityColor(task.priority)}`}>{task.priority}</span>
-                                            <div className="flex items-center gap-1">
-                                                <Clock size={12}/> {task.deadline}
-                                            </div>
-                                        </div>
-
-                                        {/* Progress Bar (System Calculated) */}
-                                        <div className="mt-3 pl-2">
-                                            <div className="flex justify-between text-[10px] mb-1">
-                                                <span className="text-slate-400">{lang === 'ar' ? 'إنجاز النظام' : 'System Progress'}</span>
-                                                <span className="font-bold text-slate-700">{task.progress}%</span>
-                                            </div>
-                                            <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
-                                                <div className="h-full bg-blue-600 rounded-full" style={{ width: `${task.progress}%` }}></div>
-                                            </div>
-                                        </div>
-                                    </div>
+                                        {r}
+                                    </button>
                                 ))}
                             </div>
                         </div>
-                    );
-                })}
-            </div>
-        )}
-      </div>
-
-      {/* --- Task Details Modal --- */}
-      {selectedTask && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in zoom-in duration-200">
-            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
-                
-                {/* Modal Header */}
-                <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex justify-between items-start">
-                    <div>
-                        <div className="flex items-center gap-2 mb-1">
-                            <span className="bg-slate-200 text-slate-600 text-[10px] font-mono px-2 py-0.5 rounded">{selectedTask.id}</span>
-                            {selectedTask.isBlocked && <span className="bg-red-100 text-red-600 text-[10px] font-bold px-2 py-0.5 rounded flex items-center gap-1"><AlertTriangle size={10}/> {lang === 'ar' ? 'متوقف' : 'Blocked'}</span>}
-                        </div>
-                        <h3 className="font-bold text-xl text-slate-900">{selectedTask.title}</h3>
-                        <p className="text-xs text-slate-500 font-medium">{selectedTask.project}</p>
-                    </div>
-                    <button onClick={() => setSelectedTask(null)} className="p-2 hover:bg-slate-200 text-slate-400 rounded-lg transition"><X size={20}/></button>
-                </div>
-
-                {/* Modal Content */}
-                <div className="p-6 overflow-y-auto space-y-6">
-                    
-                    {/* Status & Progress */}
-                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
-                        <div className="flex justify-between items-center mb-2">
-                            <span className="text-xs font-bold text-slate-500">{lang === 'ar' ? 'الحالة الحالية' : 'Current Status'}</span>
-                            <span className="text-sm font-bold text-blue-700">{selectedTask.status}</span>
-                        </div>
-                        <div className="h-3 w-full bg-slate-200 rounded-full overflow-hidden">
-                            <div className="h-full bg-blue-600 rounded-full transition-all duration-500" style={{ width: `${selectedTask.progress}%` }}></div>
-                        </div>
-                        <div className="text-right text-xs font-bold text-slate-600 mt-1">{selectedTask.progress}% {lang === 'ar' ? 'مكتمل' : 'Completed'}</div>
-                    </div>
-
-                    {/* Description */}
-                    <div>
-                        <h4 className="text-sm font-bold text-slate-800 mb-2">{lang === 'ar' ? 'تفاصيل المهمة' : 'Description'}</h4>
-                        <p className="text-sm text-slate-600 leading-relaxed bg-white p-3 border border-slate-100 rounded-xl">
-                            {selectedTask.description}
-                        </p>
-                    </div>
-
-                    {/* Details Grid */}
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
-                            <div className="flex items-center gap-2 text-slate-400 text-xs mb-1"><User size={14}/> {lang === 'ar' ? 'المسؤول' : 'Assignee'}</div>
-                            <div className="font-bold text-slate-800 text-sm">{selectedTask.assignee}</div>
-                        </div>
-                        <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
-                            <div className="flex items-center gap-2 text-slate-400 text-xs mb-1"><Clock size={14}/> {lang === 'ar' ? 'الموعد النهائي' : 'Deadline'}</div>
-                            <div className="font-bold text-slate-800 text-sm">{selectedTask.deadline}</div>
-                        </div>
-                    </div>
-
-                    {/* Action Buttons (Decision Making) */}
-                    <div className="pt-4 border-t border-slate-100">
-                        <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">{lang === 'ar' ? 'الإجراءات والقرارات' : 'Actions & Decisions'}</h4>
-                        <div className="flex flex-col gap-2">
-                            {selectedTask.status === 'Pending' && (
-                                <button onClick={() => handleTaskAction('start')} className="w-full py-3 bg-blue-600 text-white rounded-xl font-bold text-sm hover:bg-blue-700 transition flex items-center justify-center gap-2">
-                                    <PlayCircle size={18}/> {lang === 'ar' ? 'بدء التنفيذ' : 'Start Execution'}
-                                </button>
-                            )}
-                            
-                            {selectedTask.status === 'In Progress' && (
-                                <button onClick={() => handleTaskAction('submit_review')} className="w-full py-3 bg-purple-600 text-white rounded-xl font-bold text-sm hover:bg-purple-700 transition flex items-center justify-center gap-2">
-                                    <ArrowRight size={18}/> {lang === 'ar' ? 'إرسال للمراجعة' : 'Submit for Review'}
-                                </button>
-                            )}
-
-                            {selectedTask.status === 'Review' && (
-                                <div className="flex gap-2">
-                                    <button onClick={() => handleTaskAction('approve')} className="flex-1 py-3 bg-green-600 text-white rounded-xl font-bold text-sm hover:bg-green-700 transition flex items-center justify-center gap-2">
-                                        <ShieldCheck size={18}/> {lang === 'ar' ? 'اعتماد' : 'Approve'}
-                                    </button>
-                                    <button onClick={() => handleTaskAction('reject')} className="flex-1 py-3 bg-red-50 text-red-600 border border-red-200 rounded-xl font-bold text-sm hover:bg-red-100 transition">
-                                        {lang === 'ar' ? 'إعادة للعمل' : 'Reject'}
-                                    </button>
+                        
+                        {/* Escalation Warning */}
+                        {(risk === 'High' || risk === 'Critical') && (
+                            <div className="flex items-start gap-3 bg-red-50 p-3 rounded-lg border border-red-100 text-red-700 animate-pulse">
+                                <ShieldAlert size={20} className="shrink-0 mt-0.5"/>
+                                <div>
+                                    <p className="text-xs font-bold">{lang === 'ar' ? 'إشعار تصعيد تلقائي' : 'Automatic Escalation Notice'}</p>
+                                    <p className="text-[10px] opacity-80 mt-0.5">
+                                        {lang === 'ar' ? 'سيتم إرسال تنبيه فوري إلى مدير المشروع وفريق السلامة.' : 'Immediate alert will be sent to Project Manager and HSE Team.'}
+                                    </p>
                                 </div>
-                            )}
-
-                            {selectedTask.status === 'Completed' && (
-                                <div className="text-center p-3 bg-green-50 text-green-700 rounded-xl font-bold text-sm border border-green-100 flex items-center justify-center gap-2">
-                                    <CheckCircle2 size={18}/> {lang === 'ar' ? 'تم إغلاق المهمة' : 'Task Closed'}
-                                </div>
-                            )}
-                        </div>
+                            </div>
+                        )}
                     </div>
+                  </div>
+
+                  {/* Footer Actions */}
+                  <div className="flex gap-3 pt-6 sticky bottom-0 bg-white/90 backdrop-blur pb-2 z-10 border-t border-slate-100">
+                    <button className="flex-1 py-3.5 bg-white border border-slate-300 text-slate-600 rounded-xl font-bold text-sm hover:bg-slate-50 transition flex items-center justify-center gap-2">
+                        <Save size={18} /> {lang === 'ar' ? 'حفظ كمسودة' : 'Save Draft'}
+                    </button>
+                    <button className="flex-[2] py-3.5 bg-slate-900 text-white rounded-xl font-bold text-sm hover:bg-slate-800 shadow-lg shadow-slate-200 transition flex items-center justify-center gap-2">
+                        <Send size={18} /> {lang === 'ar' ? 'رفع التقرير الرسمي' : 'Submit Official Report'}
+                    </button>
+                  </div>
 
                 </div>
+              )}
             </div>
+          ))}
         </div>
-      )}
 
+      </main>
     </div>
   );
+}
+
+// --- Sub Components ---
+
+function SectionLabel({ title }: { title: string }) {
+    return (
+        <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+            {title} <div className="h-px bg-slate-200 flex-1"></div>
+        </h4>
+    );
+}
+
+interface StatusBtnProps { label: string; active: boolean; onClick: () => void; icon: any; color: 'blue' | 'green' | 'red' | 'amber' }
+function StatusButton({ label, active, onClick, icon: Icon, color }: StatusBtnProps) {
+    const colors = {
+        blue: 'bg-blue-50 border-blue-500 text-blue-700',
+        green: 'bg-emerald-50 border-emerald-500 text-emerald-700',
+        red: 'bg-red-50 border-red-500 text-red-700',
+        amber: 'bg-amber-50 border-amber-500 text-amber-700',
+    };
+    return (
+        <button 
+            onClick={onClick}
+            className={`py-4 px-2 rounded-2xl text-xs font-bold border-2 transition flex flex-col items-center gap-2 ${
+                active ? colors[color] : 'bg-white border-slate-100 text-slate-400 hover:border-slate-300 hover:bg-slate-50'
+            }`}
+        >
+            <Icon size={24} className={active ? '' : 'opacity-50'}/>
+            {label}
+        </button>
+    );
 }

@@ -3,10 +3,12 @@
 import { useState, useRef, useEffect } from 'react';
 import { 
   BookOpen, FileText, Download, Eye, ShieldCheck, Zap, 
-  Search, Filter, ChevronDown, CheckCircle2, History, 
-  AlertTriangle, FileBadge, Globe, ArrowRight, LayoutGrid, List,
-  MoreHorizontal, Plus, Trash2, Edit3, X, Save, UploadCloud, Users, AlertOctagon
+  Search, Filter, CheckCircle2, History, 
+  AlertTriangle, FileBadge, Globe, ArrowRight, List,
+  Plus, Trash2, X, Save, UploadCloud
 } from 'lucide-react';
+// ✅ استيراد الكونتكست العام
+import { useDashboard } from '../../layout'; 
 
 // --- Types ---
 type SOPStatus = 'Draft' | 'Approved' | 'Archived' | 'Under Review';
@@ -31,7 +33,9 @@ interface SOP {
 }
 
 export default function SOPsPage() {
-  const [lang, setLang] = useState<'ar' | 'en'>('ar');
+  // ✅ استخدام اللغة من النظام العام
+  const { lang } = useDashboard();
+  
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [sops, setSops] = useState<SOP[]>([]);
   const [loading, setLoading] = useState(true);
@@ -65,6 +69,7 @@ export default function SOPsPage() {
 
   // --- Mock Data ---
   useEffect(() => {
+    setLoading(true); // إعادة تفعيل اللودينج عند تغيير اللغة
     setTimeout(() => {
       setSops([
         { 
@@ -91,7 +96,7 @@ export default function SOPsPage() {
       ]);
       setLoading(false);
     }, 600);
-  }, [lang]);
+  }, [lang]); // ✅ التحديث عند تغيير اللغة
 
   // --- Actions ---
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -114,7 +119,7 @@ export default function SOPsPage() {
         version: 'V1.0',
         status: 'Draft',
         updatedAt: new Date().toISOString().split('T')[0],
-        author: 'Current User',
+        author: lang === 'ar' ? 'مستخدم حالي' : 'Current User',
         description: newSOP.description,
         scope: newSOP.scope || 'General',
         roles: newSOP.roles.split(',').map(s => s.trim()).filter(s => s !== ''),
@@ -142,8 +147,6 @@ export default function SOPsPage() {
         setSelectedSOP({ ...selectedSOP, status: newStatus });
     }
   };
-
-  const toggleLang = () => setLang(prev => prev === 'ar' ? 'en' : 'ar');
 
   // --- Helpers ---
   const getCategoryColor = (cat: Category) => {
@@ -181,9 +184,6 @@ export default function SOPsPage() {
             </p>
           </div>
           <div className="flex gap-2">
-             <button onClick={toggleLang} className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-200 transition">
-               <Globe size={14} /> {lang === 'ar' ? 'English' : 'عربي'}
-             </button>
              <button onClick={() => setIsUploadOpen(true)} className="bg-slate-900 text-white px-5 py-2 rounded-xl font-bold text-sm hover:bg-slate-800 shadow-lg flex items-center gap-2 transition active:scale-95">
                 <Plus size={16}/> {lang === 'ar' ? 'إجراء جديد' : 'New SOP'}
              </button>

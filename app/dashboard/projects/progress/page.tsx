@@ -4,9 +4,12 @@ import { useState, useEffect } from 'react';
 import { 
   BarChart2, TrendingUp, AlertTriangle, CheckCircle, 
   MoreHorizontal, Filter, Search, Calendar, BrainCircuit,
-  Globe, LayoutGrid, List, Clock, Zap, ArrowRight, ArrowLeft,
-  ChevronDown, Activity, AlertOctagon
+  LayoutGrid, List, Clock, Zap, ArrowRight, ArrowLeft,
+  ChevronDown, Activity, AlertOctagon, Loader2
 } from 'lucide-react';
+
+// ✅ استيراد الكونتكست العام
+import { useDashboard } from '../../layout'; 
 
 // --- Types & Interfaces ---
 type ProjectStatus = 'On Track' | 'At Risk' | 'Delayed' | 'Critical' | 'Completed';
@@ -28,7 +31,9 @@ interface Project {
 }
 
 export default function EnterpriseProgressPage() {
-  const [lang, setLang] = useState<'ar' | 'en'>('ar');
+  // ✅ استخدام اللغة من النظام العام
+  const { lang } = useDashboard();
+  
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
@@ -37,6 +42,7 @@ export default function EnterpriseProgressPage() {
 
   // --- Mock Data Loading ---
   useEffect(() => {
+    setLoading(true); // إعادة تفعيل اللودينج عند تغيير اللغة
     setTimeout(() => {
       setProjects([
         { 
@@ -66,11 +72,9 @@ export default function EnterpriseProgressPage() {
       ]);
       setLoading(false);
     }, 800);
-  }, [lang]);
+  }, [lang]); // ✅ التحديث عند تغيير اللغة
 
   // --- Logic ---
-  const toggleLang = () => setLang(prev => prev === 'ar' ? 'en' : 'ar');
-
   const runAiAnalysis = () => {
     setIsAiAnalyzing(true);
     setTimeout(() => {
@@ -97,9 +101,6 @@ export default function EnterpriseProgressPage() {
             </p>
           </div>
           <div className="flex items-center gap-3">
-             <button onClick={toggleLang} className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-200 transition">
-               <Globe size={14} /> {lang === 'ar' ? 'English' : 'عربي'}
-             </button>
              <div className="h-8 w-px bg-slate-200 mx-1"></div>
              <button className="p-2 bg-slate-100 rounded-lg text-slate-600 hover:bg-slate-200" onClick={() => setViewMode('grid')}>
                 <LayoutGrid size={18} className={viewMode === 'grid' ? 'text-blue-600' : ''} />
@@ -107,11 +108,14 @@ export default function EnterpriseProgressPage() {
              <button className="p-2 bg-slate-100 rounded-lg text-slate-600 hover:bg-slate-200" onClick={() => setViewMode('list')}>
                 <List size={18} className={viewMode === 'list' ? 'text-blue-600' : ''} />
              </button>
+             
+             {/* زر التحليل الذكي */}
              <button 
                 onClick={runAiAnalysis}
+                disabled={isAiAnalyzing}
                 className="bg-slate-900 text-white px-5 py-2.5 rounded-xl font-bold text-sm hover:bg-slate-800 shadow-lg shadow-slate-200 transition flex items-center gap-2"
              >
-                <BrainCircuit size={16} className={isAiAnalyzing ? 'animate-pulse' : ''} /> 
+                {isAiAnalyzing ? <Loader2 size={16} className="animate-spin"/> : <BrainCircuit size={16} />} 
                 {isAiAnalyzing ? (lang === 'ar' ? 'جاري التحليل...' : 'Analyzing...') : (lang === 'ar' ? 'تحليل الأداء الذكي' : 'AI Performance Scan')}
              </button>
           </div>
@@ -141,6 +145,9 @@ export default function EnterpriseProgressPage() {
             <div className="mt-4 bg-gradient-to-r from-purple-50 to-blue-50 p-4 rounded-xl border border-purple-100 flex items-start gap-3 animate-in slide-in-from-top-2">
                 <div className="p-2 bg-white rounded-lg text-purple-600 shadow-sm"><BrainCircuit size={18}/></div>
                 <p className="text-sm text-slate-700 font-medium leading-relaxed mt-1">{aiInsight}</p>
+                <button onClick={() => setAiInsight(null)} className="mr-auto text-slate-400 hover:text-slate-600">
+                    {lang === 'ar' ? <ArrowLeft size={16}/> : <ArrowRight size={16}/>}
+                </button>
             </div>
         )}
       </div>
@@ -154,7 +161,9 @@ export default function EnterpriseProgressPage() {
                 {projects.map(project => (
                     <div key={project.id} className="group bg-white rounded-2xl border border-slate-200 hover:border-blue-300 shadow-sm hover:shadow-xl transition-all duration-300 relative overflow-hidden">
                         
-                        {/* Header */}
+                        {/* Severity Line */}
+                        <div className={`absolute top-0 left-0 right-0 h-1 ${getStatusColor(project.status, 'bg-line')}`}></div>
+
                         <div className="p-6 pb-4 border-b border-slate-50 flex justify-between items-start">
                             <div>
                                 <div className="flex items-center gap-2 mb-1">
@@ -181,7 +190,7 @@ export default function EnterpriseProgressPage() {
                         {/* Body */}
                         <div className="p-6 pt-4">
                             <div className="flex justify-between items-center mb-4">
-                                <span className={`px-2.5 py-1 rounded-lg text-xs font-bold border flex items-center gap-1.5 ${getStatusColor(project.status, 'bg')}`}>
+                                <span className={`px-2.5 py-1 rounded-lg text-xs font-bold border flex items-center gap-1.5 ${getStatusColor(project.status, 'badge')}`}>
                                     {getStatusIcon(project.status)}
                                     {project.status}
                                 </span>
@@ -238,15 +247,17 @@ export default function EnterpriseProgressPage() {
 
 // --- Helper Functions & Components ---
 
-function getStatusColor(status: ProjectStatus, type: 'bg' | 'text') {
+function getStatusColor(status: ProjectStatus, type: 'bg-line' | 'text' | 'badge') {
     const colors = {
-        'On Track': { bg: 'bg-emerald-50 text-emerald-700 border-emerald-100', text: 'text-emerald-500' },
-        'At Risk': { bg: 'bg-amber-50 text-amber-700 border-amber-100', text: 'text-amber-500' },
-        'Delayed': { bg: 'bg-orange-50 text-orange-700 border-orange-100', text: 'text-orange-500' },
-        'Critical': { bg: 'bg-red-50 text-red-700 border-red-100', text: 'text-red-600' },
-        'Completed': { bg: 'bg-blue-50 text-blue-700 border-blue-100', text: 'text-blue-600' },
+        'On Track': { line: 'bg-emerald-500', text: 'text-emerald-500', badge: 'bg-emerald-50 text-emerald-700 border-emerald-100' },
+        'At Risk': { line: 'bg-amber-500', text: 'text-amber-500', badge: 'bg-amber-50 text-amber-700 border-amber-100' },
+        'Delayed': { line: 'bg-orange-500', text: 'text-orange-500', badge: 'bg-orange-50 text-orange-700 border-orange-100' },
+        'Critical': { line: 'bg-red-600', text: 'text-red-600', badge: 'bg-red-50 text-red-700 border-red-100' },
+        'Completed': { line: 'bg-blue-600', text: 'text-blue-600', badge: 'bg-blue-50 text-blue-700 border-blue-100' },
     };
-    return type === 'bg' ? colors[status].bg : colors[status].text;
+    if (type === 'bg-line') return colors[status].line;
+    if (type === 'text') return colors[status].text;
+    return colors[status].badge;
 }
 
 function getStatusIcon(status: ProjectStatus) {
