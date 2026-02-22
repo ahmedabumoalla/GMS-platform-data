@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { 
   ShieldCheck, Lock, Search, Filter, Database, 
-  History, Fingerprint, Key, CheckCircle2, AlertTriangle, User
+  History, Fingerprint, Key, CheckCircle2, AlertTriangle, User, RefreshCw,
 } from 'lucide-react';
 import { useDashboard } from '../../layout';
 
