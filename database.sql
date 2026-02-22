@@ -1,60 +1,63 @@
--- 1. تنظيف شامل (حذف الجداول القديمة لضمان عدم التعارض)
+-- حذف الجداول القديمة
 DROP TABLE IF EXISTS permissions CASCADE;
+DROP TABLE IF EXISTS profiles CASCADE;
 DROP TABLE IF EXISTS users CASCADE;
 DROP TYPE IF EXISTS user_role_type CASCADE;
 
--- 2. تعريف أنواع المستخدمين
-CREATE TYPE user_role_type AS ENUM ('super_admin', 'admin', 'manager', 'employee');
+-- تعريف نوع المستخدمين
+CREATE TYPE user_role_type AS ENUM ('super_admin', 'admin', 'manager', 'technician', 'employee');
 
--- 3. جدول المستخدمين (مع دعم رقم الجوال والمسمى الوظيفي)
-CREATE TABLE users (
-    id SERIAL PRIMARY KEY,
-    full_name VARCHAR(100) NOT NULL,
+-- جدول profiles المرتبط بـ Supabase Auth
+CREATE TABLE profiles (
+    id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+    full_name VARCHAR(100),
     email VARCHAR(150) UNIQUE NOT NULL,
-    password_hash VARCHAR(255) NOT NULL, -- سنخزن كلمة المرور هنا
-    phone VARCHAR(20) NOT NULL,          -- رقم الجوال إجباري
+    phone VARCHAR(20),
+    national_id VARCHAR(20),
+    address TEXT,
+    username VARCHAR(100) UNIQUE,
     role user_role_type DEFAULT 'employee',
-    job_title VARCHAR(100),              -- المسمى الوظيفي (يحدده السوبر أدمن)
-    
-    -- عمود الصلاحيات: مصفوفة نصوص لتخزين الصلاحيات الممنوحة
-    -- مثال: ['STOP_EMPLOYEE', 'APPROVE_CONTRACT']
-    granted_permissions TEXT[] DEFAULT '{}', 
-    
-    is_active BOOLEAN DEFAULT TRUE,      -- لإيقاف الموظف
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    job_title VARCHAR(100),
+    permissions TEXT[] DEFAULT '{}',
+    status VARCHAR(20) DEFAULT 'active',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- 4. إدخال السوبر أدمن (ببياناتك الخاصة)
--- ملاحظة: كلمة المرور هنا نصية، يفضل تشفيرها لاحقاً في الـ Backend
-INSERT INTO users (full_name, email, password_hash, phone, role, job_title, granted_permissions)
-VALUES (
-    'CEO', 
-    'ceo.gmsdata@gmail.com', 
-    'Ah_19951995', 
-    '0508424401', 
-    'super_admin', 
-    'General Manager', 
-    ARRAY['ALL_ACCESS'] -- صلاحية مطلقة
+-- جدول الصلاحيات
+CREATE TABLE permissions (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL UNIQUE,
+    description TEXT,
+    category VARCHAR(50)
 );
 
--- 5. إدخال مستخدمين تجريبيين (للتجربة)
-INSERT INTO users (full_name, email, password_hash, phone, role, job_title, granted_permissions)
-VALUES 
-(
-    'Project Manager', 
-    'manager@gms.com', 
-    '123456', 
-    '0500000001', 
-    'admin', 
-    'مدير التشغيل', 
-    ARRAY['REVIEW_PROJECT', 'APPROVE_CONTRACT'] -- لديه صلاحيتين فقط
-),
-(
-    'HR Specialist', 
-    'hr@gms.com', 
-    '123456', 
-    '0500000002', 
-    'admin', 
-    'مسؤول التوظيف', 
-    ARRAY['ADD_EMPLOYEE', 'STOP_EMPLOYEE'] -- لديه صلاحيات الموارد البشرية
+-- إدراج الصلاحيات الافتراضية
+INSERT INTO permissions (name, description, category) VALUES
+('ALL_ACCESS', 'صلاحية الوصول الكامل', 'admin'),
+('REVIEW_PROJECT', 'مراجعة المشاريع', 'projects'),
+('APPROVE_CONTRACT', 'الموافقة على العقود', 'contracts'),
+('ADD_EMPLOYEE', 'إضافة موظفين', 'hr'),
+('STOP_EMPLOYEE', 'إيقاف موظف', 'hr'),
+('CREATE_INVOICE', 'إنشاء فاتورة', 'finance'),
+('VIEW_REPORTS', 'عرض التقارير', 'reports');
+
+-- RLS Policies (سياسات الأمان)
+ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
+
+-- سياسة للقراءة: يمكن كل مستخدم رؤية بيانته فقط
+CREATE POLICY "users_can_read_own_profile"
+ON profiles FOR SELECT
+USING (auth.uid() = id);
+
+-- سياسة التحديث: يمكن المستخدم تحديث بيانته فقط
+CREATE POLICY "users_can_update_own_profile"
+ON profiles FOR UPDATE
+USING (auth.uid() = id);
+
+-- سياسة للـ Admin: يمكن الأدمن رؤية جميع البيانات
+CREATE POLICY "admin_can_read_all_profiles"
+ON profiles FOR SELECT
+USING (
+  (SELECT role FROM profiles WHERE id = auth.uid()) IN ('super_admin', 'admin')
 );

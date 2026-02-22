@@ -1,11 +1,13 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { supabase } from '@/lib/supabase';
 import { 
   Receipt, Plus, Filter, Download, ChevronDown, Calendar, 
   Search, CheckCircle2, AlertTriangle, X, FileText, ArrowRightLeft,
-  DollarSign, Globe, MoreHorizontal, ShieldCheck, RefreshCw
+  DollarSign, Globe, MoreHorizontal, ShieldCheck, RefreshCw, Loader2
 } from 'lucide-react';
+import { useDashboard } from '../../layout';
 
 // --- Types ---
 type ExpenseStatus = 'Draft' | 'Pending' | 'Approved' | 'Rejected' | 'Reimbursed';
@@ -28,9 +30,12 @@ interface Expense {
 }
 
 export default function ExpensesPage() {
-  const [lang, setLang] = useState<'ar' | 'en'>('ar');
-  const [period, setPeriod] = useState('Feb 2026');
+  const { lang, user, isDark } = useDashboard();
+  const isRTL = lang === 'ar';
+  
+  const [period, setPeriod] = useState(new Date().toLocaleDateString(isRTL ? 'ar-SA' : 'en-US', { month: 'short', year: 'numeric' }));
   const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
   
   // Data States
   const [expenses, setExpenses] = useState<Expense[]>([]);
@@ -47,33 +52,81 @@ export default function ExpensesPage() {
     item: '', amount: 0, category: 'Office', hasReceipt: false
   });
 
-  // --- Mock Data ---
-  useEffect(() => {
+  const isAdmin = user?.role === 'admin' || user?.role === 'super_admin' || user?.role === 'project_manager';
+
+  // --- 1. Fetch Real Data from Supabase (🛠️ FIXED: Decoupled Queries) ---
+  const fetchExpenses = async () => {
     setLoading(true);
-    setTimeout(() => {
-      setExpenses([
-        { 
-          id: 'EXP-001', reference: 'REF-1023', item: lang === 'ar' ? 'شراء قرطاسية' : 'Stationery Purchase', 
-          amount: 450, category: 'Office', date: '2024-02-05', status: 'Approved', 
-          submittedBy: 'Ahmed Al-Ghamdi', department: 'Operations', hasReceipt: true,
-          auditLog: [{ action: 'Approved', user: 'Finance Mgr', time: '2024-02-06 10:00' }]
-        },
-        { 
-          id: 'EXP-002', reference: 'REF-1024', item: lang === 'ar' ? 'وقود سيارات' : 'Vehicle Fuel', 
-          amount: 230, category: 'Transport', date: '2024-02-04', status: 'Pending', 
-          submittedBy: 'Saeed Al-Qahtani', department: 'Maintenance', project: 'Site B', hasReceipt: true,
-          auditLog: [{ action: 'Submitted', user: 'Saeed', time: '2024-02-04 14:30' }]
-        },
-        { 
-          id: 'EXP-003', reference: 'REF-1025', item: lang === 'ar' ? 'ضيافة اجتماعات' : 'Meeting Hospitality', 
-          amount: 150, category: 'Hospitality', date: '2024-02-03', status: 'Reimbursed', 
-          submittedBy: 'Yasser Al-Harbi', department: 'HR', hasReceipt: false,
-          auditLog: [{ action: 'Reimbursed', user: 'System', time: '2024-02-05 09:00' }]
-        },
-      ]);
+    try {
+      // 1. جلب المصروفات فقط
+      let expQuery = supabase.from('expenses').select('*').order('created_at', { ascending: false });
+
+      if (!isAdmin) {
+        expQuery = expQuery.eq('submitted_by', user?.id);
+      }
+
+      const { data: expensesData, error: expError } = await expQuery;
+      if (expError) throw expError;
+
+      if (expensesData && expensesData.length > 0) {
+          const expIds = expensesData.map(e => e.id);
+          
+          // 2. جلب سجل العمليات (Audit Logs) بشكل منفصل
+          const { data: logsData } = await supabase.from('expense_audit_logs').select('*').in('expense_id', expIds);
+
+          // 3. تجميع جميع معرّفات المستخدمين (أصحاب الطلبات + من قاموا بالاعتماد/الرفض)
+          const userIdsToFetch = new Set<string>();
+          expensesData.forEach(e => { if(e.submitted_by) userIdsToFetch.add(e.submitted_by); });
+          logsData?.forEach(l => { if(l.actor_id) userIdsToFetch.add(l.actor_id); });
+
+          // 4. جلب بيانات المستخدمين
+          const { data: profilesData } = await supabase.from('profiles').select('id, full_name, department').in('id', Array.from(userIdsToFetch));
+
+          // 5. دمج البيانات برمجياً (لتجنب خطأ {} الخاص بـ Supabase JOINs)
+          const formattedData: Expense[] = expensesData.map(exp => {
+              const submitter = profilesData?.find(p => p.id === exp.submitted_by);
+              
+              const expLogs = logsData?.filter(l => l.expense_id === exp.id) || [];
+              const mappedLogs = expLogs.map(log => {
+                  const actor = profilesData?.find(p => p.id === log.actor_id);
+                  return {
+                      action: log.action,
+                      user: actor?.full_name || 'System',
+                      time: new Date(log.created_at).toLocaleString(isRTL ? 'ar-SA' : 'en-US')
+                  };
+              }).sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime());
+
+              return {
+                  id: exp.id,
+                  reference: exp.reference,
+                  item: exp.item,
+                  amount: Number(exp.amount),
+                  category: exp.category as Category,
+                  date: new Date(exp.created_at).toLocaleDateString(isRTL ? 'ar-SA' : 'en-US'),
+                  status: exp.status as ExpenseStatus,
+                  submittedBy: submitter?.full_name || 'Unknown',
+                  department: submitter?.department || exp.department || 'General',
+                  project: exp.project_id ? 'Project Linked' : undefined,
+                  hasReceipt: exp.has_receipt,
+                  notes: exp.notes,
+                  auditLog: mappedLogs
+              };
+          });
+
+          setExpenses(formattedData);
+      } else {
+          setExpenses([]);
+      }
+    } catch (error: any) {
+      console.error('Error fetching expenses:', error.message || error);
+    } finally {
       setLoading(false);
-    }, 800);
-  }, [lang]);
+    }
+  };
+
+  useEffect(() => {
+    if (user) fetchExpenses();
+  }, [user, isRTL]);
 
   // --- Calculations ---
   const totalAmount = expenses.reduce((acc, e) => acc + e.amount, 0);
@@ -86,47 +139,89 @@ export default function ExpensesPage() {
     setIsDrawerOpen(true);
   };
 
-  const handleAddExpense = () => {
-    if (!newExpense.item || !newExpense.amount) return;
-    const expense: Expense = {
-        id: `EXP-${Date.now()}`,
-        reference: `REF-${Math.floor(Math.random() * 10000)}`,
-        item: newExpense.item!,
-        amount: Number(newExpense.amount),
-        category: newExpense.category as Category,
-        date: new Date().toISOString().split('T')[0],
-        status: 'Pending',
-        submittedBy: 'Current User',
-        department: 'My Dept',
-        hasReceipt: newExpense.hasReceipt || false,
-        auditLog: [{ action: 'Created', user: 'Current User', time: new Date().toLocaleString() }]
-    };
-    setExpenses([expense, ...expenses]);
-    setIsAddModalOpen(false);
-    setNewExpense({ item: '', amount: 0, category: 'Office', hasReceipt: false });
-    alert(lang === 'ar' ? 'تم إضافة المصروف بنجاح' : 'Expense added successfully');
-  };
+  const handleAddExpense = async () => {
+    if (!newExpense.item || !newExpense.amount || !user) return;
+    setActionLoading('add');
 
-  const handleApprove = (id: string) => {
-    if(confirm(lang === 'ar' ? 'هل أنت متأكد من اعتماد المصروف؟' : 'Approve this expense?')) {
-        setExpenses(prev => prev.map(e => e.id === id ? { ...e, status: 'Approved' } : e));
-        if(selectedExpense?.id === id) setSelectedExpense(prev => prev ? {...prev, status: 'Approved'} : null);
+    try {
+      const refGen = `REF-${Math.floor(1000 + Math.random() * 9000)}`;
+      
+      // 1. إدخال المصروف
+      const { data: expData, error: expError } = await supabase.from('expenses').insert({
+        reference: refGen,
+        item: newExpense.item,
+        amount: newExpense.amount,
+        category: newExpense.category,
+        has_receipt: newExpense.hasReceipt,
+        submitted_by: user.id,
+        status: 'Pending'
+      }).select('id').single();
+
+      if (expError) throw expError;
+
+      // 2. إدخال حركة التدقيق
+      if (expData) {
+          await supabase.from('expense_audit_logs').insert({
+            expense_id: expData.id,
+            action: 'Submitted',
+            actor_id: user.id
+          });
+      }
+
+      alert(isRTL ? 'تم إضافة المصروف بنجاح' : 'Expense added successfully');
+      setIsAddModalOpen(false);
+      setNewExpense({ item: '', amount: 0, category: 'Office', hasReceipt: false });
+      fetchExpenses(); // Refresh data
+
+    } catch (error: any) {
+      alert('Error: ' + error.message);
+    } finally {
+      setActionLoading(null);
     }
   };
 
-  const handleReject = (id: string) => {
-    const reason = prompt(lang === 'ar' ? 'سبب الرفض:' : 'Rejection Reason:');
-    if (reason) {
-        setExpenses(prev => prev.map(e => e.id === id ? { ...e, status: 'Rejected', notes: reason } : e));
-        if(selectedExpense?.id === id) setSelectedExpense(prev => prev ? {...prev, status: 'Rejected', notes: reason} : null);
+  const handleUpdateStatus = async (id: string, newStatus: ExpenseStatus) => {
+    if (!user) return;
+    
+    let reason = '';
+    if (newStatus === 'Rejected') {
+        reason = prompt(isRTL ? 'الرجاء إدخال سبب الرفض:' : 'Please enter rejection reason:') || '';
+        if (!reason && newStatus === 'Rejected') return; 
+    } else {
+        if (!confirm(isRTL ? 'هل أنت متأكد من هذا الإجراء؟' : 'Are you sure about this action?')) return;
+    }
+
+    setActionLoading(id);
+
+    try {
+      // 1. تحديث حالة المصروف
+      const updatePayload: any = { status: newStatus };
+      if (reason) updatePayload.notes = reason;
+
+      const { error: updError } = await supabase.from('expenses').update(updatePayload).eq('id', id);
+      if (updError) throw updError;
+
+      // 2. تسجيل حركة التدقيق
+      await supabase.from('expense_audit_logs').insert({
+        expense_id: id,
+        action: newStatus,
+        actor_id: user.id
+      });
+
+      alert(isRTL ? 'تم التحديث بنجاح' : 'Updated successfully');
+      fetchExpenses(); // Refresh
+      setIsDrawerOpen(false);
+      
+    } catch (error: any) {
+      alert('Error: ' + error.message);
+    } finally {
+      setActionLoading(null);
     }
   };
 
   const handleExport = () => {
-    alert(lang === 'ar' ? 'جاري تصدير تقرير المصروفات (Excel)...' : 'Exporting Expenses Report (Excel)...');
+    alert(isRTL ? 'جاري تصدير تقرير المصروفات (Excel)...' : 'Exporting Expenses Report (Excel)...');
   };
-
-  const toggleLang = () => setLang(prev => prev === 'ar' ? 'en' : 'ar');
 
   const filteredExpenses = expenses.filter(e => {
       const matchesSearch = e.item.toLowerCase().includes(searchTerm.toLowerCase()) || e.reference.toLowerCase().includes(searchTerm.toLowerCase());
@@ -136,174 +231,203 @@ export default function ExpensesPage() {
 
   // --- Helper Components ---
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat(lang === 'ar' ? 'ar-SA' : 'en-US', { style: 'currency', currency: 'SAR', maximumFractionDigits: 0 }).format(amount);
+    return new Intl.NumberFormat(isRTL ? 'ar-SA' : 'en-US', { style: 'currency', currency: 'SAR', maximumFractionDigits: 0 }).format(amount);
   };
 
   const getStatusBadge = (status: ExpenseStatus) => {
     const styles = {
-        'Approved': 'bg-green-100 text-green-700 border-green-200',
-        'Reimbursed': 'bg-blue-100 text-blue-700 border-blue-200',
-        'Pending': 'bg-amber-100 text-amber-700 border-amber-200',
-        'Draft': 'bg-slate-100 text-slate-600 border-slate-200',
-        'Rejected': 'bg-red-100 text-red-700 border-red-200'
+        'Approved': isDark ? 'bg-green-900/30 text-green-400 border-green-800' : 'bg-green-100 text-green-700 border-green-200',
+        'Reimbursed': isDark ? 'bg-blue-900/30 text-blue-400 border-blue-800' : 'bg-blue-100 text-blue-700 border-blue-200',
+        'Pending': isDark ? 'bg-amber-900/30 text-amber-400 border-amber-800' : 'bg-amber-100 text-amber-700 border-amber-200',
+        'Draft': isDark ? 'bg-slate-800 text-slate-400 border-slate-700' : 'bg-slate-100 text-slate-600 border-slate-200',
+        'Rejected': isDark ? 'bg-red-900/30 text-red-400 border-red-800' : 'bg-red-100 text-red-700 border-red-200'
     };
-    return <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${styles[status]}`}>{status}</span>;
+    
+    const statusText = isRTL ? {
+        'Approved': 'معتمد', 'Reimbursed': 'مُسدد', 'Pending': 'قيد المراجعة', 'Draft': 'مسودة', 'Rejected': 'مرفوض'
+    }[status] : status;
+
+    return <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${styles[status]}`}>{statusText}</span>;
   };
 
+  const bgMain = isDark ? "bg-slate-950" : "bg-slate-50";
+  const textMain = isDark ? "text-white" : "text-slate-900";
+  const textSub = isDark ? "text-slate-400" : "text-slate-500";
+  const cardBg = isDark ? "bg-slate-900/60 border-slate-800" : "bg-white border-slate-200";
+
   return (
-    <div className={`min-h-screen bg-slate-50 font-sans text-slate-800 ${lang === 'ar' ? 'dir-rtl' : 'dir-ltr'}`} dir={lang === 'ar' ? 'rtl' : 'ltr'}>
+    <div className={`min-h-screen font-sans ${bgMain} ${isRTL ? 'dir-rtl' : 'dir-ltr'}`} dir={isRTL ? 'rtl' : 'ltr'}>
       
       {/* --- Section 1: Expenses Header --- */}
-      <div className="bg-white border-b border-slate-200 px-6 py-5 sticky top-0 z-20 shadow-sm">
+      <div className={`border-b px-6 py-5 sticky top-0 z-20 backdrop-blur-xl ${isDark ? 'bg-slate-950/80 border-slate-800' : 'bg-white/80 border-slate-200 shadow-sm'}`}>
         <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-6">
           <div>
-            <h1 className="text-2xl font-black text-slate-900 flex items-center gap-2">
+            <h1 className={`text-2xl font-black flex items-center gap-2 ${textMain}`}>
               <Receipt className="text-amber-600" />
-              {lang === 'ar' ? 'المصروفات النثرية والعهد' : 'Petty Cash & Expenses'}
+              {isRTL ? 'المصروفات النثرية والعهد' : 'Petty Cash & Expenses'}
             </h1>
             <div className="flex items-center gap-2 mt-1">
-                <span className="text-sm text-slate-500 font-medium">{lang === 'ar' ? 'الفترة المالية:' : 'Financial Period:'}</span>
-                <span className="bg-slate-100 px-2 py-0.5 rounded text-xs font-bold text-slate-700 flex items-center gap-1"><Calendar size={12}/> {period}</span>
+                <span className={`text-sm font-medium ${textSub}`}>{isRTL ? 'الفترة المالية:' : 'Financial Period:'}</span>
+                <span className={`px-2 py-0.5 rounded text-xs font-bold flex items-center gap-1 ${isDark ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-700'}`}>
+                    <Calendar size={12}/> {period}
+                </span>
             </div>
           </div>
           
-          <div className="flex gap-2">
-             <button onClick={toggleLang} className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-200 transition">
-               <Globe size={14} /> {lang === 'ar' ? 'English' : 'عربي'}
-             </button>
-             <button onClick={() => setIsAddModalOpen(true)} className="bg-slate-900 text-white px-5 py-2.5 rounded-xl font-bold text-sm hover:bg-slate-800 flex items-center gap-2 shadow-lg transition active:scale-95">
-                <Plus size={18} /> {lang === 'ar' ? 'تسجيل مصروف' : 'Add Expense'}
+          <div className="flex gap-2 w-full md:w-auto">
+             <button onClick={() => setIsAddModalOpen(true)} className="bg-blue-600 text-white px-5 py-2.5 rounded-xl font-bold text-sm hover:bg-blue-700 flex-1 md:flex-none flex items-center justify-center gap-2 shadow-lg shadow-blue-500/20 transition active:scale-95">
+                <Plus size={18} /> {isRTL ? 'تسجيل مصروف' : 'Add Expense'}
              </button>
           </div>
         </div>
 
         {/* KPI Strip */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-            <StatCard label={lang === 'ar' ? 'إجمالي المصروفات' : 'Total Expenses'} value={formatCurrency(totalAmount)} color="blue" icon={DollarSign} />
-            <StatCard label={lang === 'ar' ? 'المعتمدة' : 'Approved'} value={formatCurrency(approvedAmount)} color="green" icon={CheckCircle2} />
-            <StatCard label={lang === 'ar' ? 'قيد المراجعة' : 'Pending Review'} value={formatCurrency(pendingAmount)} color="amber" icon={RefreshCw} />
-            <StatCard label={lang === 'ar' ? 'عدد العمليات' : 'Transactions'} value={expenses.length} color="slate" icon={FileText} />
+            <StatCard isDark={isDark} label={isRTL ? 'إجمالي المصروفات' : 'Total Expenses'} value={formatCurrency(totalAmount)} color="blue" icon={DollarSign} />
+            <StatCard isDark={isDark} label={isRTL ? 'المعتمدة' : 'Approved'} value={formatCurrency(approvedAmount)} color="green" icon={CheckCircle2} />
+            <StatCard isDark={isDark} label={isRTL ? 'قيد المراجعة' : 'Pending Review'} value={formatCurrency(pendingAmount)} color="amber" icon={RefreshCw} />
+            <StatCard isDark={isDark} label={isRTL ? 'عدد العمليات' : 'Transactions'} value={expenses.length} color="slate" icon={FileText} />
         </div>
 
         {/* Filters & Search */}
-        <div className="flex gap-3 items-center">
-            <div className="relative flex-1 max-w-sm">
-                <Search className="absolute right-3 top-2.5 text-slate-400 w-4 h-4 rtl:right-3 ltr:left-3" />
+        <div className="flex flex-wrap gap-3 items-center">
+            <div className="relative flex-1 min-w-[200px] max-w-sm">
+                <Search className={`absolute top-2.5 text-slate-400 w-4 h-4 ${isRTL ? 'right-3' : 'left-3'}`} />
                 <input 
                     type="text" 
-                    placeholder={lang === 'ar' ? 'بحث برقم المرجع أو البند...' : 'Search reference or item...'} 
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl pr-10 pl-4 py-2 text-xs outline-none focus:border-blue-500 transition"
+                    placeholder={isRTL ? 'بحث برقم المرجع أو البند...' : 'Search reference or item...'} 
+                    className={`w-full rounded-xl py-2 text-xs outline-none transition border ${isRTL ? 'pr-10 pl-4' : 'pl-10 pr-4'} ${isDark ? 'bg-slate-900 border-slate-700 text-white focus:border-blue-500' : 'bg-slate-50 border-slate-200 focus:border-blue-500'}`}
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                 />
             </div>
-            <div className="h-8 w-px bg-slate-200 mx-1"></div>
-            {['All', 'Pending', 'Approved', 'Rejected'].map(status => (
-                <button 
-                    key={status} 
-                    onClick={() => setFilterStatus(status)} 
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition whitespace-nowrap ${filterStatus === status ? 'bg-slate-800 text-white border-slate-800' : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'}`}
-                >
-                    {status}
-                </button>
-            ))}
+            <div className={`h-8 w-px mx-1 hidden sm:block ${isDark ? 'bg-slate-800' : 'bg-slate-200'}`}></div>
+            <div className="flex gap-2 overflow-x-auto pb-1 custom-scrollbar">
+              {['All', 'Pending', 'Approved', 'Rejected'].map(status => {
+                  const statusLabel = status === 'All' ? (isRTL ? 'الكل' : 'All') : 
+                                      status === 'Pending' ? (isRTL ? 'قيد المراجعة' : 'Pending') :
+                                      status === 'Approved' ? (isRTL ? 'المعتمدة' : 'Approved') :
+                                      (isRTL ? 'المرفوضة' : 'Rejected');
+                  return (
+                    <button 
+                        key={status} 
+                        onClick={() => setFilterStatus(status)} 
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition whitespace-nowrap ${filterStatus === status ? (isDark ? 'bg-slate-800 text-white border-slate-700' : 'bg-slate-800 text-white border-slate-800') : (isDark ? 'bg-transparent border-slate-700 text-slate-400 hover:bg-slate-800' : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50')}`}
+                    >
+                        {statusLabel}
+                    </button>
+                  );
+              })}
+            </div>
         </div>
       </div>
 
       {/* --- Section 2: Expenses Table --- */}
       <div className="p-6">
-        <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
-            <table className="w-full text-left rtl:text-right">
-                <thead className="bg-slate-50 text-slate-500 text-xs font-bold border-b border-slate-200 uppercase tracking-wider">
-                    <tr>
-                        <th className="p-4">{lang === 'ar' ? 'المرجع' : 'Reference'}</th>
-                        <th className="p-4">{lang === 'ar' ? 'البند' : 'Item'}</th>
-                        <th className="p-4">{lang === 'ar' ? 'التصنيف' : 'Category'}</th>
-                        <th className="p-4">{lang === 'ar' ? 'المبلغ' : 'Amount'}</th>
-                        <th className="p-4">{lang === 'ar' ? 'مقدم الطلب' : 'Submitted By'}</th>
-                        <th className="p-4">{lang === 'ar' ? 'الحالة' : 'Status'}</th>
-                        <th className="p-4 text-end">{lang === 'ar' ? 'إجراءات' : 'Actions'}</th>
-                    </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                    {loading ? (
-                        <tr><td colSpan={7} className="p-10 text-center text-slate-400 animate-pulse">{lang === 'ar' ? 'جاري تحميل البيانات...' : 'Loading data...'}</td></tr>
-                    ) : filteredExpenses.map(expense => (
-                        <tr key={expense.id} className="hover:bg-slate-50 transition group cursor-default">
-                            <td className="p-4 font-mono text-xs text-slate-500">{expense.reference}</td>
-                            <td className="p-4 font-bold text-slate-800 text-sm">{expense.item}</td>
-                            <td className="p-4"><span className="bg-slate-100 px-2 py-1 rounded text-xs text-slate-600 border border-slate-200">{expense.category}</span></td>
-                            <td className="p-4 font-bold text-red-600 text-sm">-{formatCurrency(expense.amount)}</td>
-                            <td className="p-4">
-                                <div className="text-xs font-bold text-slate-700">{expense.submittedBy}</div>
-                                <div className="text-[10px] text-slate-400">{expense.date}</div>
-                            </td>
-                            <td className="p-4">{getStatusBadge(expense.status)}</td>
-                            <td className="p-4 text-end">
-                                <button 
-                                    onClick={() => handleOpenDrawer(expense)}
-                                    className="text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 ml-auto"
-                                >
-                                    <FileText size={14}/> {lang === 'ar' ? 'التفاصيل' : 'Details'}
-                                </button>
-                            </td>
+        <div className={`rounded-2xl border overflow-hidden shadow-sm ${cardBg}`}>
+            <div className="overflow-x-auto">
+                <table className={`w-full ${isRTL ? 'text-right' : 'text-left'}`}>
+                    <thead className={`text-xs font-bold border-b uppercase tracking-wider ${isDark ? 'bg-slate-900/50 text-slate-400 border-slate-800' : 'bg-slate-50 text-slate-500 border-slate-200'}`}>
+                        <tr>
+                            <th className="p-4">{isRTL ? 'المرجع' : 'Reference'}</th>
+                            <th className="p-4">{isRTL ? 'البند' : 'Item'}</th>
+                            <th className="p-4">{isRTL ? 'التصنيف' : 'Category'}</th>
+                            <th className="p-4">{isRTL ? 'المبلغ' : 'Amount'}</th>
+                            <th className="p-4">{isRTL ? 'مقدم الطلب' : 'Submitted By'}</th>
+                            <th className="p-4">{isRTL ? 'الحالة' : 'Status'}</th>
+                            <th className={`p-4 ${isRTL ? 'text-left' : 'text-right'}`}>{isRTL ? 'إجراءات' : 'Actions'}</th>
                         </tr>
-                    ))}
-                </tbody>
-            </table>
+                    </thead>
+                    <tbody className={`divide-y ${isDark ? 'divide-slate-800/50' : 'divide-slate-100'}`}>
+                        {loading ? (
+                            <tr><td colSpan={7} className="p-10 text-center"><Loader2 className="animate-spin text-blue-500 mx-auto" size={30}/></td></tr>
+                        ) : filteredExpenses.length === 0 ? (
+                            <tr><td colSpan={7} className={`p-10 text-center font-medium ${textSub}`}>{isRTL ? 'لا توجد بيانات مطابقة.' : 'No matching data found.'}</td></tr>
+                        ) : filteredExpenses.map(expense => (
+                            <tr key={expense.id} className={`transition group cursor-default ${isDark ? 'hover:bg-slate-800/30' : 'hover:bg-slate-50'}`}>
+                                <td className={`p-4 font-mono text-xs ${textSub}`}>{expense.reference}</td>
+                                <td className={`p-4 font-bold text-sm ${textMain}`}>{expense.item}</td>
+                                <td className="p-4"><span className={`px-2 py-1 rounded text-xs border ${isDark ? 'bg-slate-800 text-slate-300 border-slate-700' : 'bg-slate-100 text-slate-600 border-slate-200'}`}>{expense.category}</span></td>
+                                <td className="p-4 font-bold text-red-500 text-sm">-{formatCurrency(expense.amount)}</td>
+                                <td className="p-4">
+                                    <div className={`text-xs font-bold ${textMain}`}>{expense.submittedBy}</div>
+                                    <div className={`text-[10px] ${textSub}`}>{expense.date}</div>
+                                </td>
+                                <td className="p-4">{getStatusBadge(expense.status)}</td>
+                                <td className={`p-4 ${isRTL ? 'text-left' : 'text-right'}`}>
+                                    <button 
+                                        onClick={() => handleOpenDrawer(expense)}
+                                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 ml-auto ${isDark ? 'text-blue-400 hover:bg-slate-800' : 'text-blue-600 hover:bg-blue-50'}`}
+                                    >
+                                        <FileText size={14}/> {isRTL ? 'التفاصيل' : 'Details'}
+                                    </button>
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
         </div>
       </div>
 
       {/* --- Section 3: Expense Detail Drawer --- */}
       {isDrawerOpen && selectedExpense && (
         <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-            <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-right duration-300">
+            <div className={`w-full max-w-md rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-right duration-300 ${isDark ? 'bg-slate-900 border border-slate-700' : 'bg-white'}`}>
                 
                 {/* Header */}
-                <div className="p-6 border-b border-slate-100 bg-slate-50 flex justify-between items-start">
+                <div className={`p-6 border-b flex justify-between items-start ${isDark ? 'bg-slate-800/50 border-slate-800' : 'bg-slate-50 border-slate-100'}`}>
                     <div>
                         <div className="flex items-center gap-2 mb-2">
-                            <span className="text-xs text-slate-500 font-mono bg-white border border-slate-200 px-2 py-0.5 rounded">{selectedExpense.reference}</span>
+                            <span className={`text-xs font-mono px-2 py-0.5 rounded border ${isDark ? 'bg-slate-900 text-slate-400 border-slate-700' : 'bg-white text-slate-500 border-slate-200'}`}>{selectedExpense.reference}</span>
                             {getStatusBadge(selectedExpense.status)}
                         </div>
-                        <h2 className="text-xl font-bold text-slate-900">{selectedExpense.item}</h2>
-                        <div className="text-xs text-slate-500 mt-1">{selectedExpense.submittedBy} • {selectedExpense.date}</div>
+                        <h2 className={`text-xl font-bold ${textMain}`}>{selectedExpense.item}</h2>
+                        <div className={`text-xs mt-1 ${textSub}`}>{selectedExpense.submittedBy} • {selectedExpense.date}</div>
                     </div>
-                    <button onClick={() => setIsDrawerOpen(false)} className="p-2 hover:bg-slate-200 rounded-lg"><X size={20}/></button>
+                    <button onClick={() => setIsDrawerOpen(false)} className={`p-2 rounded-lg transition ${isDark ? 'hover:bg-slate-800 text-slate-400' : 'hover:bg-slate-200 text-slate-500'}`}><X size={20}/></button>
                 </div>
 
                 {/* Content */}
-                <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
                     
-                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 text-center">
-                        <div className="text-xs font-bold text-slate-400 uppercase mb-1">{lang === 'ar' ? 'قيمة المصروف' : 'Expense Amount'}</div>
-                        <div className="text-3xl font-black text-slate-900">{formatCurrency(selectedExpense.amount)}</div>
+                    <div className={`p-4 rounded-xl border text-center ${isDark ? 'bg-slate-800/50 border-slate-700' : 'bg-slate-50 border-slate-100'}`}>
+                        <div className={`text-xs font-bold uppercase mb-1 ${textSub}`}>{isRTL ? 'قيمة المصروف' : 'Expense Amount'}</div>
+                        <div className={`text-3xl font-black ${textMain}`}>{formatCurrency(selectedExpense.amount)}</div>
                     </div>
 
                     <div className="space-y-4">
-                        <div className="flex justify-between p-3 bg-white border border-slate-100 rounded-xl text-sm">
-                            <span className="text-slate-500">{lang === 'ar' ? 'التصنيف' : 'Category'}</span>
-                            <span className="font-bold text-slate-800">{selectedExpense.category}</span>
+                        <div className={`flex justify-between p-3 border rounded-xl text-sm ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-100'}`}>
+                            <span className={textSub}>{isRTL ? 'التصنيف' : 'Category'}</span>
+                            <span className={`font-bold ${textMain}`}>{selectedExpense.category}</span>
                         </div>
-                        <div className="flex justify-between p-3 bg-white border border-slate-100 rounded-xl text-sm">
-                            <span className="text-slate-500">{lang === 'ar' ? 'الإدارة / المشروع' : 'Dept / Project'}</span>
-                            <span className="font-bold text-slate-800">{selectedExpense.department} {selectedExpense.project ? `/ ${selectedExpense.project}` : ''}</span>
+                        <div className={`flex justify-between p-3 border rounded-xl text-sm ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-100'}`}>
+                            <span className={textSub}>{isRTL ? 'الإدارة / المشروع' : 'Dept / Project'}</span>
+                            <span className={`font-bold ${textMain}`}>{selectedExpense.department} {selectedExpense.project ? `/ ${selectedExpense.project}` : ''}</span>
                         </div>
-                        <div className="flex justify-between p-3 bg-white border border-slate-100 rounded-xl text-sm">
-                            <span className="text-slate-500">{lang === 'ar' ? 'مرفق الإيصال' : 'Receipt Attached'}</span>
-                            <span className={`font-bold ${selectedExpense.hasReceipt ? 'text-green-600' : 'text-red-600'}`}>
-                                {selectedExpense.hasReceipt ? (lang === 'ar' ? 'نعم' : 'Yes') : (lang === 'ar' ? 'لا' : 'No')}
+                        <div className={`flex justify-between p-3 border rounded-xl text-sm ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-100'}`}>
+                            <span className={textSub}>{isRTL ? 'مرفق الإيصال' : 'Receipt Attached'}</span>
+                            <span className={`font-bold ${selectedExpense.hasReceipt ? 'text-emerald-500' : 'text-red-500'}`}>
+                                {selectedExpense.hasReceipt ? (isRTL ? 'نعم' : 'Yes') : (isRTL ? 'لا' : 'No')}
                             </span>
                         </div>
+                        {selectedExpense.notes && (
+                            <div className={`p-4 border rounded-xl text-sm ${isDark ? 'bg-red-900/10 border-red-900/30' : 'bg-red-50 border-red-100'}`}>
+                                <span className="font-bold text-red-500 block mb-1">{isRTL ? 'ملاحظات / سبب الرفض:' : 'Notes / Rejection Reason:'}</span>
+                                <span className={isDark ? 'text-red-200' : 'text-red-700'}>{selectedExpense.notes}</span>
+                            </div>
+                        )}
                     </div>
 
                     {/* Audit Log */}
-                    <div className="pt-4 border-t border-slate-100">
-                        <h4 className="text-xs font-bold text-slate-400 uppercase mb-3">{lang === 'ar' ? 'سجل العمليات' : 'Audit Log'}</h4>
-                        <div className="space-y-3 pl-2 border-l-2 border-slate-100">
+                    <div className={`pt-4 border-t ${isDark ? 'border-slate-800' : 'border-slate-100'}`}>
+                        <h4 className={`text-xs font-bold uppercase mb-3 ${textSub}`}>{isRTL ? 'سجل العمليات' : 'Audit Log'}</h4>
+                        <div className={`space-y-4 pl-2 rtl:pl-0 rtl:pr-2 border-l-2 rtl:border-l-0 rtl:border-r-2 ${isDark ? 'border-slate-700' : 'border-slate-200'}`}>
                             {selectedExpense.auditLog.map((log, idx) => (
-                                <div key={idx} className="text-xs text-slate-600 pl-2">
-                                    <span className="font-bold">{log.action}</span> by {log.user} <span className="text-slate-400">- {log.time}</span>
+                                <div key={idx} className={`text-xs relative pl-4 rtl:pl-0 rtl:pr-4 ${textSub}`}>
+                                    <div className={`absolute w-2 h-2 rounded-full top-1 -left-[5px] rtl:left-auto rtl:-right-[5px] ${isDark ? 'bg-slate-600' : 'bg-slate-300'}`}></div>
+                                    <span className={`font-bold ${textMain}`}>{log.action}</span> by {log.user} 
+                                    <div className="mt-0.5 opacity-70 font-mono">{log.time}</div>
                                 </div>
                             ))}
                         </div>
@@ -312,18 +436,29 @@ export default function ExpensesPage() {
                 </div>
 
                 {/* Footer Actions */}
-                <div className="p-5 border-t border-slate-100 bg-slate-50 flex gap-2">
-                    {selectedExpense.status === 'Pending' && (
+                <div className={`p-5 border-t flex gap-2 ${isDark ? 'border-slate-800 bg-slate-800/30' : 'border-slate-100 bg-slate-50'}`}>
+                    {(isAdmin && selectedExpense.status === 'Pending') && (
                         <>
-                            <button onClick={() => handleApprove(selectedExpense.id)} className="flex-1 py-3 bg-green-600 text-white rounded-xl font-bold text-sm hover:bg-green-700 shadow-lg flex items-center justify-center gap-2">
-                                <ShieldCheck size={16}/> {lang === 'ar' ? 'اعتماد' : 'Approve'}
+                            <button 
+                                onClick={() => handleUpdateStatus(selectedExpense.id, 'Approved')} 
+                                disabled={actionLoading === selectedExpense.id}
+                                className="flex-1 py-3 bg-emerald-600 text-white rounded-xl font-bold text-sm hover:bg-emerald-700 shadow-lg flex items-center justify-center gap-2 disabled:opacity-50"
+                            >
+                                {actionLoading === selectedExpense.id ? <Loader2 size={16} className="animate-spin"/> : <ShieldCheck size={16}/>} {isRTL ? 'اعتماد' : 'Approve'}
                             </button>
-                            <button onClick={() => handleReject(selectedExpense.id)} className="flex-1 py-3 bg-red-50 text-red-700 border border-red-200 rounded-xl font-bold text-sm hover:bg-red-100 flex items-center justify-center gap-2">
-                                <X size={16}/> {lang === 'ar' ? 'رفض' : 'Reject'}
+                            <button 
+                                onClick={() => handleUpdateStatus(selectedExpense.id, 'Rejected')} 
+                                disabled={actionLoading === selectedExpense.id}
+                                className={`flex-1 py-3 border rounded-xl font-bold text-sm flex items-center justify-center gap-2 disabled:opacity-50 ${isDark ? 'bg-red-900/20 border-red-800 text-red-400 hover:bg-red-900/40' : 'bg-red-50 border-red-200 text-red-600 hover:bg-red-100'}`}
+                            >
+                                {actionLoading === selectedExpense.id ? <Loader2 size={16} className="animate-spin"/> : <X size={16}/>} {isRTL ? 'رفض' : 'Reject'}
                             </button>
                         </>
                     )}
-                    <button onClick={handleExport} className="p-3 bg-white border border-slate-300 text-slate-600 rounded-xl hover:bg-slate-100"><Download size={18}/></button>
+                    {(!isAdmin && selectedExpense.status === 'Pending') && (
+                         <div className={`flex-1 py-3 text-center text-sm font-bold ${textSub}`}>{isRTL ? 'بانتظار موافقة الإدارة' : 'Pending Admin Approval'}</div>
+                    )}
+                    <button onClick={handleExport} className={`p-3 border rounded-xl transition ${isDark ? 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700' : 'bg-white border-slate-300 text-slate-600 hover:bg-slate-100'}`}><Download size={18}/></button>
                 </div>
             </div>
         </div>
@@ -332,37 +467,38 @@ export default function ExpensesPage() {
       {/* --- Section 4: Add Expense Modal --- */}
       {isAddModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in zoom-in duration-200">
-            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden">
-                <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-                    <h3 className="font-bold text-lg text-slate-800">{lang === 'ar' ? 'تسجيل مصروف جديد' : 'New Expense Entry'}</h3>
-                    <button onClick={() => setIsAddModalOpen(false)} className="p-2 hover:bg-slate-100 text-slate-400 rounded-lg"><X size={20}/></button>
+            <div className={`w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden border ${isDark ? 'bg-slate-900 border-slate-700' : 'bg-white border-white'}`}>
+                <div className={`p-5 border-b flex justify-between items-center ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-100'}`}>
+                    <h3 className={`font-bold text-lg ${textMain}`}>{isRTL ? 'تسجيل مصروف جديد' : 'New Expense Entry'}</h3>
+                    <button onClick={() => setIsAddModalOpen(false)} className={`p-2 rounded-lg transition ${isDark ? 'hover:bg-slate-700 text-slate-400' : 'hover:bg-slate-200 text-slate-500'}`}><X size={20}/></button>
                 </div>
                 
                 <div className="p-6 space-y-4">
                     <div>
-                        <label className="text-xs font-bold text-slate-500 mb-1.5 block">{lang === 'ar' ? 'البند / الوصف' : 'Item Description'}</label>
+                        <label className={`text-xs font-bold mb-1.5 block ${textSub}`}>{isRTL ? 'البند / الوصف' : 'Item Description'}</label>
                         <input 
                             type="text" 
-                            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 outline-none focus:border-blue-500 text-sm font-bold"
+                            className={`w-full rounded-xl px-4 py-3 outline-none focus:ring-2 transition text-sm font-bold border ${isDark ? 'bg-slate-800 border-slate-700 text-white focus:ring-blue-500/50' : 'bg-slate-50 border-slate-200 focus:ring-blue-100 text-slate-900'}`}
                             value={newExpense.item}
                             onChange={(e) => setNewExpense({...newExpense, item: e.target.value})}
-                            placeholder="e.g. Office Supplies"
+                            placeholder={isRTL ? "مثال: أدوات مكتبية" : "e.g. Office Supplies"}
                         />
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                         <div>
-                            <label className="text-xs font-bold text-slate-500 mb-1.5 block">{lang === 'ar' ? 'المبلغ' : 'Amount'}</label>
+                            <label className={`text-xs font-bold mb-1.5 block ${textSub}`}>{isRTL ? 'المبلغ (SAR)' : 'Amount (SAR)'}</label>
                             <input 
                                 type="number" 
-                                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 outline-none focus:border-blue-500 text-sm font-bold"
-                                value={newExpense.amount}
+                                className={`w-full rounded-xl px-4 py-3 outline-none focus:ring-2 transition text-sm font-bold border ${isDark ? 'bg-slate-800 border-slate-700 text-white focus:ring-blue-500/50' : 'bg-slate-50 border-slate-200 focus:ring-blue-100 text-slate-900'}`}
+                                value={newExpense.amount || ''}
                                 onChange={(e) => setNewExpense({...newExpense, amount: Number(e.target.value)})}
+                                placeholder="0.00"
                             />
                         </div>
                         <div>
-                            <label className="text-xs font-bold text-slate-500 mb-1.5 block">{lang === 'ar' ? 'التصنيف' : 'Category'}</label>
+                            <label className={`text-xs font-bold mb-1.5 block ${textSub}`}>{isRTL ? 'التصنيف' : 'Category'}</label>
                             <select 
-                                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 outline-none focus:border-blue-500 text-sm font-bold"
+                                className={`w-full rounded-xl px-4 py-3 outline-none focus:ring-2 transition text-sm font-bold border ${isDark ? 'bg-slate-800 border-slate-700 text-white focus:ring-blue-500/50' : 'bg-slate-50 border-slate-200 focus:ring-blue-100 text-slate-900'}`}
                                 value={newExpense.category}
                                 onChange={(e) => setNewExpense({...newExpense, category: e.target.value as Category})}
                             >
@@ -370,23 +506,28 @@ export default function ExpensesPage() {
                                 <option value="Transport">Transport</option>
                                 <option value="Hospitality">Hospitality</option>
                                 <option value="Maintenance">Maintenance</option>
+                                <option value="Other">Other</option>
                             </select>
                         </div>
                     </div>
-                    <div className="flex items-center gap-3 bg-slate-50 p-3 rounded-xl border border-slate-100">
+                    <div className={`flex items-center gap-3 p-3 rounded-xl border ${isDark ? 'bg-slate-800/50 border-slate-700' : 'bg-slate-50 border-slate-100'}`}>
                         <input 
                             type="checkbox" 
-                            className="w-5 h-5 accent-blue-600 rounded"
+                            className="w-5 h-5 accent-blue-600 rounded cursor-pointer"
                             checked={newExpense.hasReceipt}
                             onChange={(e) => setNewExpense({...newExpense, hasReceipt: e.target.checked})}
                         />
-                        <span className="text-sm font-bold text-slate-700">{lang === 'ar' ? 'يوجد إيصال / فاتورة' : 'Receipt Available'}</span>
+                        <span className={`text-sm font-bold cursor-pointer ${textMain}`} onClick={() => setNewExpense({...newExpense, hasReceipt: !newExpense.hasReceipt})}>
+                            {isRTL ? 'يوجد إيصال / فاتورة مرفقة' : 'Receipt Available / Attached'}
+                        </span>
                     </div>
                 </div>
 
-                <div className="p-5 border-t border-slate-100 bg-slate-50 flex gap-3">
-                    <button onClick={() => setIsAddModalOpen(false)} className="flex-1 py-2.5 bg-white border border-slate-300 text-slate-600 rounded-xl font-bold text-sm hover:bg-slate-100">{lang === 'ar' ? 'إلغاء' : 'Cancel'}</button>
-                    <button onClick={handleAddExpense} className="flex-1 py-2.5 bg-slate-900 text-white rounded-xl font-bold text-sm hover:bg-slate-800 shadow-lg">{lang === 'ar' ? 'حفظ وإرسال' : 'Submit'}</button>
+                <div className={`p-5 border-t flex gap-3 ${isDark ? 'bg-slate-800/50 border-slate-800' : 'bg-slate-50 border-slate-100'}`}>
+                    <button onClick={() => setIsAddModalOpen(false)} className={`flex-1 py-3 rounded-xl font-bold text-sm transition border ${isDark ? 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700' : 'bg-white border-slate-300 text-slate-600 hover:bg-slate-100'}`}>{isRTL ? 'إلغاء' : 'Cancel'}</button>
+                    <button onClick={handleAddExpense} disabled={actionLoading === 'add'} className="flex-[2] py-3 bg-blue-600 text-white rounded-xl font-bold text-sm hover:bg-blue-700 shadow-lg shadow-blue-500/20 flex items-center justify-center gap-2 disabled:opacity-50">
+                        {actionLoading === 'add' ? <Loader2 size={18} className="animate-spin"/> : <Plus size={18}/>} {isRTL ? 'حفظ وإرسال للاعتماد' : 'Submit for Approval'}
+                    </button>
                 </div>
             </div>
         </div>
@@ -397,20 +538,20 @@ export default function ExpensesPage() {
 }
 
 // --- Helper Components ---
-function StatCard({ label, value, color, icon: Icon }: any) {
+function StatCard({ label, value, color, icon: Icon, isDark }: any) {
     const colors: any = {
-        blue: 'bg-blue-50 text-blue-600',
-        green: 'bg-green-50 text-green-600',
-        amber: 'bg-amber-50 text-amber-600',
-        slate: 'bg-slate-100 text-slate-600',
+        blue: isDark ? 'bg-blue-500/20 text-blue-400 border-blue-500/30' : 'bg-blue-50 text-blue-600 border-blue-100',
+        green: isDark ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' : 'bg-emerald-50 text-emerald-600 border-emerald-100',
+        amber: isDark ? 'bg-amber-500/20 text-amber-400 border-amber-500/30' : 'bg-amber-50 text-amber-600 border-amber-100',
+        slate: isDark ? 'bg-slate-800 text-slate-300 border-slate-700' : 'bg-slate-100 text-slate-600 border-slate-200',
     };
     return (
-        <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex items-center justify-between">
+        <div className={`p-4 rounded-2xl border flex items-center justify-between transition-all ${isDark ? 'bg-slate-900/60 border-slate-800 hover:bg-slate-800' : 'bg-white border-slate-200 hover:shadow-sm'}`}>
             <div>
-                <div className="text-xl font-black text-slate-900">{value}</div>
-                <div className="text-xs font-bold text-slate-400">{label}</div>
+                <div className={`text-xl font-black ${isDark ? 'text-white' : 'text-slate-900'}`}>{value}</div>
+                <div className={`text-xs font-bold mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{label}</div>
             </div>
-            <div className={`p-3 rounded-xl ${colors[color]}`}>
+            <div className={`p-3 rounded-xl border ${colors[color]}`}>
                 <Icon size={20} />
             </div>
         </div>

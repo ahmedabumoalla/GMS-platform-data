@@ -1,39 +1,34 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
+import { supabase } from '@/lib/supabase';
+import imageCompression from 'browser-image-compression';
 import { 
   MapPin, Users, Calendar, FileText, 
   Shield, ArrowLeft, ArrowRight, 
   Cpu, Sparkles, CheckCircle2, ChevronDown, 
-  Briefcase, Layers, Save, UploadCloud, HardHat, FileCheck, X, Plus, Loader2
+  Briefcase, Layers, UploadCloud, HardHat, FileCheck, X, Plus, Loader2, DollarSign, Search, Star, File as FileIcon, Building2
 } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { useDashboard } from '../../layout';
 
-// ✅ استيراد الكونتكست العام (تأكد أن المسار صحيح حسب مكان ملفك)
-// إذا كان الملف في app/dashboard/projects/create/page.tsx فالمسار الصحيح هو:
-import { useDashboard } from '../../layout'; 
-
-// استدعاء الخريطة ديناميكياً
 const ProjectMapPicker = dynamic(() => import('@/components/ProjectMapPicker'), { 
   ssr: false,
-  loading: () => <div className="h-full w-full bg-slate-100 animate-pulse flex items-center justify-center text-slate-400 rounded-2xl">جاري تهيئة الخريطة...</div>
+  loading: () => <div className="h-full w-full bg-slate-100/50 animate-pulse flex items-center justify-center text-slate-400 rounded-3xl">جاري تحميل الخريطة...</div>
 });
 
-// --- الأنواع ---
+// --- Types ---
 type ProjectCategory = 'Maintenance' | 'Cable Testing' | 'Infrastructure' | 'Tech Support' | 'Emergency';
-type RiskLevel = 'Low' | 'Medium' | 'High' | 'Critical';
 
-interface TeamMember {
-  name: string;
-  role: string;
-}
+interface ManagerData { id: string; full_name: string; completion_rate: number; active_projects: number; }
+interface Subcontractor { id: string; name: string; }
 
 interface ProjectData {
   title: string;
   category: ProjectCategory;
   type: string;
-  risk: RiskLevel;
   status: string;
   startDate: string;
   endDate: string;
@@ -41,540 +36,486 @@ interface ProjectData {
   budget: string;
   locationName: string;
   coordinates: { lat: number; lng: number };
-  manager: string;
-  team: TeamMember[];
+  managers: ManagerData[]; 
   equipment: string[];
   complianceItems: Record<string, boolean>;
+  subcontractorId: string; // 👈 إضافة المقاول
+  contractType: 'Direct' | 'Subcontract'; // 👈 إضافة نوع العقد
 }
 
 const STEPS = [
-  { id: 1, label: { ar: 'هوية المشروع', en: 'Project Identity' }, icon: Briefcase },
-  { id: 2, label: { ar: 'الجدول الزمني', en: 'Timeline' }, icon: Calendar },
-  { id: 3, label: { ar: 'الموقع والنطاق', en: 'Location & Scope' }, icon: MapPin },
-  { id: 4, label: { ar: 'الفريق والموارد', en: 'Team & Resources' }, icon: Users },
-  { id: 5, label: { ar: 'المخاطر والامتثال', en: 'Risk & Compliance' }, icon: Shield },
+  { id: 1, label: { ar: 'هوية المشروع', en: 'Identity' }, desc: {ar: 'التفاصيل الأساسية', en: 'Basic Info'}, icon: Briefcase },
+  { id: 2, label: { ar: 'الجدول والميزانية', en: 'Timeline' }, desc: {ar: 'الوقت والتكلفة', en: 'Time & Cost'}, icon: Calendar },
+  { id: 3, label: { ar: 'الموقع والنطاق', en: 'Location' }, desc: {ar: 'الإحداثيات', en: 'Coordinates'}, icon: MapPin },
+  { id: 4, label: { ar: 'المدراء والموارد', en: 'Resources' }, desc: {ar: 'القيادة والمعدات', en: 'Leadership & Eqp'}, icon: Users },
+  { id: 5, label: { ar: 'الامتثال', en: 'Compliance' }, desc: {ar: 'المخاطر والعقود', en: 'Risk & Contracts'}, icon: Shield },
 ];
 
 export default function EnterpriseProjectCreate() {
   const router = useRouter();
-  
-  // ✅ استخدام اللغة من الكونتكست العام للنظام
-  const { lang } = useDashboard(); 
+  const { lang, isDark } = useDashboard(); 
+  const isRTL = lang === 'ar';
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [currentStep, setCurrentStep] = useState(1);
   const [isAiLoading, setIsAiLoading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   
-  const [newTeamMember, setNewTeamMember] = useState('');
+  // Smart Manager Logic
+  const [availableManagers, setAvailableManagers] = useState<ManagerData[]>([]);
+  const [managerSearch, setManagerSearch] = useState('');
+  const [loadingManagers, setLoadingManagers] = useState(true);
+
+  // Subcontractor Logic
+  const [subcontractors, setSubcontractors] = useState<Subcontractor[]>([]);
+  const [isNewSubModalOpen, setIsNewSubModalOpen] = useState(false);
+  const [newSubName, setNewSubName] = useState('');
+  const [isCreatingSub, setIsCreatingSub] = useState(false);
+
+  // Upload Logic
+  const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
+  const [isCompressing, setIsCompressing] = useState(false);
 
   const [formData, setFormData] = useState<ProjectData>({
-    title: '',
-    category: 'Maintenance',
-    type: 'Internal Team',
-    risk: 'Low',
-    status: 'Draft',
-    startDate: '',
-    endDate: '',
-    clientName: '',
-    budget: '',
-    locationName: '',
-    coordinates: { lat: 24.7136, lng: 46.6753 },
-    manager: '',
-    team: [],
-    equipment: [],
-    complianceItems: {
-        'التحقق من SLA': false,
-        'اعتماد خطة السلامة': false,
-        'تفويض الميزانية': false
-    }
+    title: '', category: 'Maintenance', type: 'Internal Team', status: 'Draft',
+    startDate: '', endDate: '', clientName: '', budget: '', locationName: '',
+    coordinates: { lat: 24.7136, lng: 46.6753 }, managers: [], equipment: [],
+    subcontractorId: '', contractType: 'Direct',
+    complianceItems: { 'التحقق من SLA': false, 'اعتماد خطة السلامة': false, 'تفويض الميزانية': false }
   });
+
+  // --- Fetch Initial Data ---
+  useEffect(() => {
+    const fetchSmartData = async () => {
+      setLoadingManagers(true);
+      try {
+        // Fetch Managers
+        const { data: pms } = await supabase.from('profiles').select('id, full_name, completion_rate').eq('role', 'project_manager');
+        const { data: activeProjects } = await supabase.from('projects').select('manager_name').eq('status', 'Active');
+        
+        if (pms) {
+          const enrichedManagers = pms.map(pm => ({
+            id: pm.id, full_name: pm.full_name,
+            completion_rate: pm.completion_rate || Math.floor(Math.random() * 20) + 80, 
+            active_projects: activeProjects?.filter(p => p.manager_name?.includes(pm.full_name)).length || 0
+          })).sort((a, b) => a.active_projects !== b.active_projects ? a.active_projects - b.active_projects : b.completion_rate - a.completion_rate);
+          setAvailableManagers(enrichedManagers);
+        }
+
+        // Fetch Subcontractors
+        const { data: subs } = await supabase.from('subcontractors').select('id, name');
+        if (subs) setSubcontractors(subs);
+
+      } catch (error) { console.error(error); } 
+      finally { setLoadingManagers(false); }
+    };
+    fetchSmartData();
+  }, []);
 
   // --- Handlers ---
   const handleNext = () => setCurrentStep(prev => Math.min(prev + 1, STEPS.length));
   const handleBack = () => setCurrentStep(prev => Math.max(prev - 1, 1));
 
-  const addTeamMember = () => {
-    if (newTeamMember.trim()) {
-        const memberObj: TeamMember = { name: newTeamMember, role: lang === 'ar' ? 'عضو فريق' : 'Team Member' };
-        setFormData(prev => ({ ...prev, team: [...prev.team, memberObj] }));
-        setNewTeamMember('');
+  const toggleManager = (mgr: ManagerData) => {
+    setFormData(prev => {
+        const exists = prev.managers.find(m => m.id === mgr.id);
+        return { ...prev, managers: exists ? prev.managers.filter(m => m.id !== mgr.id) : [...prev.managers, mgr] };
+    });
+  };
+
+  const toggleCompliance = (key: string) => setFormData(prev => ({ ...prev, complianceItems: { ...prev.complianceItems, [key]: !prev.complianceItems[key] } }));
+
+  const handleSubcontractorChange = (value: string) => {
+      if (value === 'NEW') {
+          setIsNewSubModalOpen(true);
+      } else {
+          setFormData(prev => ({ 
+              ...prev, 
+              subcontractorId: value, 
+              contractType: value ? 'Subcontract' : 'Direct' // 👈 التصنيف التلقائي
+          }));
+      }
+  };
+
+  const createNewSubcontractor = async () => {
+      if (!newSubName.trim()) return;
+      setIsCreatingSub(true);
+      try {
+          const { data, error } = await supabase.from('subcontractors').insert({ name: newSubName }).select().single();
+          if (error) throw error;
+          
+          setSubcontractors(prev => [...prev, data]);
+          setFormData(prev => ({ ...prev, subcontractorId: data.id, contractType: 'Subcontract' }));
+          setIsNewSubModalOpen(false);
+          setNewSubName('');
+      } catch (error) { alert('Failed to create subcontractor'); }
+      finally { setIsCreatingSub(false); }
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files?.length) return;
+    setIsCompressing(true);
+    const processedFiles: File[] = [];
+    for (const file of Array.from(e.target.files)) {
+        if (file.type.startsWith('image/')) {
+            try {
+                const compressedBlob = await imageCompression(file, { maxSizeMB: 1, maxWidthOrHeight: 1920, useWebWorker: true });
+                processedFiles.push(new File([compressedBlob], file.name, { type: file.type }));
+            } catch { processedFiles.push(file); }
+        } else processedFiles.push(file);
     }
+    setUploadedFiles(prev => [...prev, ...processedFiles]);
+    setIsCompressing(false);
+    if (fileInputRef.current) fileInputRef.current.value = ''; 
   };
 
-  const removeTeamMember = (index: number) => {
-    setFormData(prev => ({ ...prev, team: prev.team.filter((_, i) => i !== index) }));
-  };
-
-  const toggleCompliance = (key: string) => {
-      setFormData(prev => ({
-          ...prev,
-          complianceItems: { ...prev.complianceItems, [key]: !prev.complianceItems[key] }
-      }));
-  };
-
-  // --- تشغيل الذكاء الاصطناعي ---
   const triggerAiSuggestion = async () => {
-    if (!formData.title) {
-        alert(lang === 'ar' ? 'يرجى كتابة عنوان المشروع أولاً' : 'Please enter project title first');
-        return;
-    }
-
+    if (!formData.title) return alert(isRTL ? 'يرجى كتابة العنوان أولاً' : 'Title required');
     setIsAiLoading(true);
     try {
       const response = await fetch('/api/ai-assistant', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'generate-project',
-          lang, // تمرير اللغة الحالية للـ API
-          data: { title: formData.title }
-        })
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'generate-project', lang, data: { title: formData.title } })
       });
-
       const data = await response.json();
-      
-      if (data.result) {
-          const aiTeam = Array.isArray(data.result.team) 
-            ? data.result.team.map((m: any) => typeof m === 'string' ? { name: m, role: 'Suggested' } : m)
-            : [];
-
-          setFormData((prev) => ({
-            ...prev,
-            ...data.result,
-            team: [...prev.team, ...aiTeam],
-            coordinates: prev.coordinates
-          }));
-      }
-    } catch (error) {
-      console.error("AI Error:", error);
-      alert(lang === 'ar' ? 'فشل الاتصال بخدمة الذكاء الاصطناعي' : 'AI Service Error');
-    } finally {
-      setIsAiLoading(false);
-    }
+      if (data.result) setFormData(prev => ({ ...prev, budget: data.result.budget || prev.budget, equipment: data.result.equipment || prev.equipment }));
+    } catch (error) { console.error(error); } 
+    finally { setIsAiLoading(false); }
   };
 
+  const handleCreateProject = async () => {
+    setIsSubmitting(true);
+    try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) throw new Error('Not authenticated');
+
+        let fileUrls: string[] = [];
+        if (uploadedFiles.length > 0) {
+            for (const file of uploadedFiles) {
+                const fileName = `projects/${user.id}/${Date.now()}_${Math.random().toString(36).substring(7)}.${file.name.split('.').pop()}`;
+                const { error: uploadError } = await supabase.storage.from('tech-media').upload(fileName, file);
+                if (uploadError) throw uploadError;
+                const { data } = supabase.storage.from('tech-media').getPublicUrl(fileName);
+                if (data.publicUrl) fileUrls.push(data.publicUrl);
+            }
+        }
+
+        const managerNamesString = formData.managers.map(m => m.full_name).join(', ');
+
+        const { error } = await supabase.from('projects').insert({
+            created_by: user.id, title: formData.title, category: formData.category, execution_type: formData.type, status: 'Active', 
+            start_date: formData.startDate || null, end_date: formData.endDate || null, budget: formData.budget ? parseFloat(formData.budget) : 0,
+            location_name: formData.locationName, location_lat: formData.coordinates.lat, location_lng: formData.coordinates.lng,
+            manager_name: managerNamesString, equipment: formData.equipment, compliance_checklist: formData.complianceItems, contract_urls: fileUrls,
+            subcontractor_id: formData.subcontractorId || null, contract_type: formData.contractType // 👈 التخزين
+        });
+
+        if (error) throw error;
+        alert(isRTL ? 'تم إنشاء المشروع بنجاح!' : 'Project Created Successfully!');
+        router.push('/dashboard');
+    } catch (error: any) { alert(isRTL ? 'حدث خطأ أثناء الحفظ' : 'Error saving project'); } 
+    finally { setIsSubmitting(false); }
+  };
+
+  const glassCard = isDark ? "bg-slate-900/60 backdrop-blur-xl border border-slate-700 shadow-2xl shadow-black/20" : "bg-white/70 backdrop-blur-xl border border-white/60 shadow-xl shadow-slate-200/50";
+  const textMain = isDark ? "text-white" : "text-slate-900";
+  const textSub = isDark ? "text-slate-400" : "text-slate-500";
+  const inputBg = isDark ? "bg-slate-800/50 border-slate-600 text-white focus:border-blue-500" : "bg-white border-slate-200 text-slate-800 focus:border-blue-600";
+
   return (
-    <div className={`min-h-screen bg-slate-50 font-sans text-slate-800 ${lang === 'ar' ? 'dir-rtl' : 'dir-ltr'}`} dir={lang === 'ar' ? 'rtl' : 'ltr'}>
+    <div className={`min-h-screen font-sans ${isDark ? 'bg-slate-950' : 'bg-slate-50'} ${isRTL ? 'dir-rtl' : 'dir-ltr'}`} dir={isRTL ? 'rtl' : 'ltr'}>
       
-      {/* Header */}
-      <header className="bg-white/80 backdrop-blur-md border-b border-slate-200 sticky top-0 z-40 px-6 py-4 shadow-sm transition-all">
+      {/* Background Decor */}
+      <div className="fixed inset-0 pointer-events-none overflow-hidden">
+         <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-blue-600/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
+         <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-purple-600/10 rounded-full blur-3xl translate-y-1/2 -translate-x-1/2"></div>
+      </div>
+
+      <header className={`sticky top-0 z-40 px-6 py-4 transition-all border-b ${isDark ? 'bg-slate-900/80 border-slate-800' : 'bg-white/80 border-slate-200'} backdrop-blur-md`}>
         <div className="max-w-7xl mx-auto flex justify-between items-center">
           <div className="flex items-center gap-4">
-            <button onClick={() => router.back()} className="p-2.5 hover:bg-slate-100 rounded-full text-slate-500 transition-transform hover:scale-105 active:scale-95">
-              {lang === 'ar' ? <ArrowRight size={22} /> : <ArrowLeft size={22} />}
+            <button onClick={() => router.back()} className={`p-2.5 rounded-full transition-transform hover:scale-105 active:scale-95 ${isDark ? 'hover:bg-slate-800 text-slate-300' : 'hover:bg-slate-100 text-slate-600'}`}>
+              {isRTL ? <ArrowRight size={22} /> : <ArrowLeft size={22} />}
             </button>
             <div>
-              <h1 className="text-xl font-black text-slate-900 flex items-center gap-2 tracking-tight">
-                <Layers className="text-blue-600" strokeWidth={2.5} />
-                {lang === 'ar' ? 'تخطيط مشروع جديد' : 'New Project Planning'}
+              <h1 className={`text-xl font-black flex items-center gap-2 tracking-tight ${textMain}`}>
+                <Layers className="text-blue-600" strokeWidth={2.5} /> {isRTL ? 'تأسيس مشروع جديد' : 'New Project Setup'}
               </h1>
-              <p className="text-xs text-slate-500 font-medium mt-0.5">
-                نظام GMS الذكي &bull; <span className="text-blue-600 font-bold">{formData.status}</span>
+              <p className={`text-xs font-medium mt-0.5 flex items-center gap-2 ${textSub}`}>
+                Enterprise Workspace <span className="w-1 h-1 rounded-full bg-slate-400"></span> <span className="text-blue-500 font-bold">{formData.status}</span>
               </p>
             </div>
-          </div>
-
-          <div className="flex items-center gap-3">
-             {/* تم إزالة زر تغيير اللغة من هنا، الاعتماد الآن على الهيدر الرئيسي */}
-            <button className="px-6 py-2.5 bg-slate-900 text-white rounded-xl text-sm font-bold hover:bg-slate-800 hover:shadow-lg hover:shadow-slate-300 transition-all active:scale-95">
-              {lang === 'ar' ? 'إنشاء المشروع' : 'Create Project'}
-            </button>
           </div>
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto p-6 grid grid-cols-1 lg:grid-cols-12 gap-8 mt-4">
+      <main className="max-w-7xl mx-auto p-6 grid grid-cols-1 lg:grid-cols-12 gap-8 mt-4 relative z-10">
         
-        {/* Left Column: Navigation */}
+        {/* Sidebar */}
         <aside className="lg:col-span-3 hidden lg:block space-y-6 sticky top-28 h-fit">
-          <nav className="space-y-2 relative">
-            <div className={`absolute top-5 bottom-5 w-0.5 bg-slate-200 ${lang === 'ar' ? 'right-[22px]' : 'left-[22px]'} -z-10`}></div>
+          <nav className="space-y-4 relative">
+            <div className={`absolute top-6 bottom-6 w-0.5 ${isDark ? 'bg-slate-800' : 'bg-slate-200'} ${isRTL ? 'right-[22px]' : 'left-[22px]'} -z-10`}></div>
             {STEPS.map((step) => {
               const isActive = step.id === currentStep;
               const isCompleted = step.id < currentStep;
               return (
-                <div 
-                  key={step.id}
-                  onClick={() => setCurrentStep(step.id)}
-                  className={`flex items-center gap-4 p-3 rounded-2xl cursor-pointer transition-all duration-300 group ${isActive ? 'bg-white shadow-lg shadow-blue-50 border border-blue-100 translate-x-2 rtl:-translate-x-2' : 'hover:bg-white/60'}`}
-                >
-                  <div className={`w-11 h-11 rounded-full flex items-center justify-center shrink-0 border-[3px] transition-all duration-300 ${
-                    isActive ? 'bg-blue-600 border-blue-100 text-white shadow-md scale-110' : 
-                    isCompleted ? 'bg-green-500 border-green-100 text-white' : 
-                    'bg-white border-slate-200 text-slate-400 group-hover:border-slate-300'
-                  }`}>
-                    {isCompleted ? <CheckCircle2 size={20} /> : <step.icon size={20} strokeWidth={2} />}
+                <div key={step.id} onClick={() => setCurrentStep(step.id)} className={`flex items-center gap-4 p-3 rounded-2xl cursor-pointer transition-all duration-300 group ${isActive ? `${glassCard} translate-x-2 rtl:-translate-x-2` : 'hover:bg-white/10'}`}>
+                  <div className={`w-11 h-11 rounded-full flex items-center justify-center shrink-0 border-[3px] transition-all duration-300 ${isActive ? 'bg-blue-600 border-blue-500/30 text-white shadow-lg shadow-blue-600/30 scale-110' : isCompleted ? 'bg-emerald-500 border-emerald-500/30 text-white' : `${isDark ? 'bg-slate-800 border-slate-700 text-slate-500' : 'bg-white border-slate-200 text-slate-400'} group-hover:border-slate-400`}`}>
+                    {isCompleted ? <CheckCircle2 size={18} /> : <step.icon size={18} />}
                   </div>
                   <div>
-                    <span className={`block text-sm font-bold transition-colors ${isActive ? 'text-slate-800' : 'text-slate-500 group-hover:text-slate-700'}`}>
-                      {lang === 'ar' ? step.label.ar : step.label.en}
-                    </span>
-                    {isActive && <span className="text-[10px] text-blue-600 font-bold animate-pulse">{lang === 'ar' ? 'الخطوة الحالية' : 'Current Step'}</span>}
+                    <span className={`block text-sm font-bold transition-colors ${isActive ? textMain : textSub}`}>{isRTL ? step.label.ar : step.label.en}</span>
+                    <span className="text-[10px] text-slate-400 opacity-80">{isRTL ? step.desc.ar : step.desc.en}</span>
                   </div>
                 </div>
               );
             })}
           </nav>
           
-          {/* Summary Widget */}
-          <div className="bg-gradient-to-br from-slate-900 to-slate-800 p-6 rounded-3xl text-white shadow-xl shadow-slate-300 relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-24 h-24 bg-white/10 rounded-full blur-2xl -mr-10 -mt-10"></div>
-            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">ملخص سريع</h3>
-            <div className="space-y-4 relative z-10">
-              <div className="flex justify-between items-center text-sm border-b border-white/10 pb-2">
-                <span className="text-slate-400">الميزانية المقدرة</span>
-                <span className="font-mono font-bold text-emerald-400 text-lg">{formData.budget ? `${Number(formData.budget).toLocaleString()} ر.س` : '-'}</span>
-              </div>
-              <div className="flex justify-between items-center text-sm">
-                <span className="text-slate-400">مستوى المخاطر</span>
-                <span className={`font-bold px-3 py-1 rounded-full text-xs border ${
-                  formData.risk === 'High' ? 'bg-red-500/20 border-red-500/50 text-red-300' : 
-                  formData.risk === 'Medium' ? 'bg-amber-500/20 border-amber-500/50 text-amber-300' :
-                  'bg-blue-500/20 border-blue-500/50 text-blue-300'
-                }`}>{formData.risk}</span>
-              </div>
-            </div>
+          <div className="p-1 rounded-3xl bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500">
+             <div className={`${isDark ? 'bg-slate-900' : 'bg-white'} rounded-[1.3rem] p-5 relative overflow-hidden`}>
+                <div className="flex items-center gap-3 mb-3">
+                    <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg text-purple-600 dark:text-purple-400"><Sparkles size={18}/></div>
+                    <div className={`font-bold text-sm ${textMain}`}>AI Assistant</div>
+                </div>
+                <button onClick={triggerAiSuggestion} disabled={isAiLoading} className="w-full py-3 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-xl text-xs font-bold shadow-lg flex items-center justify-center gap-2 hover:opacity-90 transition-opacity">
+                    {isAiLoading ? <Loader2 className="animate-spin" size={14}/> : <Cpu size={14}/>}
+                    {isRTL ? 'توليد البيانات تلقائياً' : 'Auto-Generate Data'}
+                </button>
+             </div>
           </div>
         </aside>
 
-        {/* Center Column: Forms */}
-        <div className="lg:col-span-6 space-y-6">
-          
-          {/* Step 1: Identity */}
-          {currentStep === 1 && (
-            <div className="space-y-6 animate-in slide-in-from-bottom-8 fade-in duration-500">
-              <SectionHeader title={lang === 'ar' ? 'بيانات وهوية المشروع' : 'Project Identity'} desc={lang === 'ar' ? 'حدد التفاصيل الأساسية، يمكن للذكاء الاصطناعي مساعدتك هنا' : 'Define core details, AI can help you here'} />
-              
-              <div className="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-xl shadow-slate-200/50 space-y-6">
-                <ModernInput 
-                  label={lang === 'ar' ? 'عنوان المشروع' : 'Project Title'} 
-                  placeholder={lang === 'ar' ? 'مثال: صيانة مولدات الطوارئ - المربع 4' : 'e.g. Backup Generator Maint...'}
-                  value={formData.title}
-                  onChange={(v) => setFormData({...formData, title: v})}
-                  icon={FileText}
-                  autoFocus
-                />
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                  <ModernSelect 
-                    label={lang === 'ar' ? 'تصنيف المشروع' : 'Category'}
-                    options={['Maintenance', 'Cable Testing', 'Infrastructure', 'Tech Support', 'Emergency']}
-                    value={formData.category}
-                    onChange={(v) => setFormData({...formData, category: v as ProjectCategory})}
-                  />
-                  <ModernSelect 
-                    label={lang === 'ar' ? 'نموذج التنفيذ' : 'Execution Model'}
-                    options={['Internal Team', 'Outsourced', 'Hybrid']}
-                    value={formData.type}
-                    onChange={(v) => setFormData({...formData, type: v})}
-                  />
-                </div>
-
-                {/* Risk Selector */}
-                <div className="space-y-3 pt-2">
-                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider px-1">{lang === 'ar' ? 'تقييم المخاطر الأولي' : 'Initial Risk Assessment'}</label>
-                  <div className="flex gap-3 p-1.5 bg-slate-50/80 rounded-2xl border border-slate-200">
-                    {['Low', 'Medium', 'High', 'Critical'].map((level) => (
-                      <button 
-                        key={level} 
-                        onClick={() => setFormData({...formData, risk: level as RiskLevel})}
-                        className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all duration-300 ${
-                          formData.risk === level 
-                          ? level === 'High' || level === 'Critical' 
-                            ? 'bg-white border border-red-200 text-red-600 shadow-md shadow-red-100' 
-                            : 'bg-white border border-blue-200 text-blue-600 shadow-md shadow-blue-100'
-                          : 'text-slate-400 hover:text-slate-600 hover:bg-white/50'
-                        }`}
-                      >
-                        {level}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Step 2: Timeline */}
-          {currentStep === 2 && (
-            <div className="space-y-6 animate-in slide-in-from-bottom-8 fade-in duration-500">
-              <SectionHeader title={lang === 'ar' ? 'الجدول الزمني' : 'Timeline'} desc={lang === 'ar' ? 'تحديد الإطار الزمني للتنفيذ' : 'Set execution timeframe'} />
-              <div className="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-xl shadow-slate-200/50 space-y-6">
-                <div className="grid grid-cols-2 gap-6">
-                  <ModernInput type="date" label={lang === 'ar' ? 'تاريخ البدء' : 'Start Date'} value={formData.startDate} onChange={(v) => setFormData({...formData, startDate: v})} icon={Calendar} />
-                  <ModernInput type="date" label={lang === 'ar' ? 'تاريخ الانتهاء' : 'End Date'} value={formData.endDate} onChange={(v) => setFormData({...formData, endDate: v})} icon={Calendar} />
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Step 3: Location */}
-          {currentStep === 3 && (
-            <div className="space-y-6 animate-in slide-in-from-bottom-8 fade-in duration-500">
-                <SectionHeader title={lang === 'ar' ? 'الموقع الجغرافي' : 'Location'} desc={lang === 'ar' ? 'اضغط على الخريطة لتحديد إحداثيات الموقع بدقة' : 'Pinpoint location on map'} />
-                
-                <div className="bg-white p-2 rounded-[2rem] border border-slate-200 shadow-xl shadow-slate-200/50 overflow-hidden relative group">
-                    <div className="h-[450px] w-full rounded-[1.5rem] overflow-hidden relative z-0">
-                        <ProjectMapPicker 
-                            lat={formData.coordinates.lat} 
-                            lng={formData.coordinates.lng} 
-                            onLocationSelect={(lat, lng) => setFormData(prev => ({...prev, coordinates: {lat, lng}}))}
-                        />
-                    </div>
-                    
-                    {/* Floating Address Input */}
-                    <div className="absolute bottom-6 left-6 right-6 z-10">
-                        <div className="bg-white/90 backdrop-blur-md p-4 rounded-2xl shadow-lg border border-white/50">
-                            <ModernInput 
-                                label={lang === 'ar' ? 'وصف العنوان' : 'Address Description'}
-                                placeholder={lang === 'ar' ? 'الرياض، حي الملقا، شارع...' : 'Riyadh, Al-Malqa...'}
-                                value={formData.locationName}
-                                onChange={(v) => setFormData({...formData, locationName: v})}
-                                icon={MapPin}
-                                transparent={true}
-                            />
+        {/* Form Content */}
+        <div className="lg:col-span-9 space-y-6">
+          <AnimatePresence mode='wait'>
+            <motion.div key={currentStep} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.3 }} className={`p-8 rounded-[2.5rem] ${glassCard} min-h-[500px] flex flex-col justify-between`}>
+                <div className="space-y-8">
+                    <div className="flex items-center justify-between pb-6 border-b border-slate-200/10">
+                        <div>
+                            <h2 className={`text-2xl font-black ${textMain}`}>{isRTL ? STEPS[currentStep-1].label.ar : STEPS[currentStep-1].label.en}</h2>
+                            <p className={`text-sm ${textSub}`}>{isRTL ? STEPS[currentStep-1].desc.ar : STEPS[currentStep-1].desc.en}</p>
                         </div>
-                    </div>
-                </div>
-            </div>
-          )}
-
-          {/* Step 4: Team */}
-          {currentStep === 4 && (
-            <div className="space-y-6 animate-in slide-in-from-bottom-8 fade-in duration-500">
-                <SectionHeader title={lang === 'ar' ? 'الفريق والموارد' : 'Team & Resources'} desc={lang === 'ar' ? 'بناء فريق العمل وتجهيز المعدات' : 'Build team & allocate assets'} />
-                
-                <div className="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-xl shadow-slate-200/50 space-y-8">
-                    {/* Manager Selection */}
-                    <div className="space-y-3">
-                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider px-1">{lang === 'ar' ? 'مدير المشروع' : 'Project Manager'}</label>
-                        <div className="grid grid-cols-3 gap-3">
-                            {['م. أحمد', 'م. عمر', 'أ. سارة'].map((mgr) => (
-                                <div key={mgr} onClick={() => setFormData({...formData, manager: mgr})}
-                                    className={`p-4 rounded-2xl border cursor-pointer flex flex-col items-center gap-2 transition-all duration-300 ${
-                                        formData.manager === mgr 
-                                        ? 'bg-blue-50 border-blue-500/50 text-blue-700 shadow-md ring-1 ring-blue-500/20' 
-                                        : 'bg-slate-50 border-transparent hover:bg-white hover:border-slate-200 hover:shadow-md'
-                                    }`}>
-                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold transition-colors ${formData.manager === mgr ? 'bg-blue-200 text-blue-800' : 'bg-white border border-slate-200 text-slate-500'}`}>{mgr.charAt(0)}</div>
-                                    <span className="text-sm font-bold">{mgr}</span>
-                                </div>
-                            ))}
-                        </div>
+                        <div className={`text-4xl font-black opacity-5 ${textMain}`}>0{currentStep}</div>
                     </div>
 
-                    {/* Team Members Input */}
-                    <div className="space-y-3">
-                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider px-1">{lang === 'ar' ? 'أعضاء الفريق الفني' : 'Technical Team'}</label>
-                        <div className="flex gap-2">
-                            <input 
-                                type="text" 
-                                className="flex-1 bg-slate-50 border border-slate-200 rounded-2xl px-5 py-3 outline-none text-sm focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all placeholder:text-slate-400"
-                                placeholder={lang === 'ar' ? 'أدخل اسم الموظف واضغط إضافة...' : 'Type name and add...'}
-                                value={newTeamMember}
-                                onChange={(e) => setNewTeamMember(e.target.value)}
-                                onKeyDown={(e) => e.key === 'Enter' && addTeamMember()}
-                            />
-                            <button onClick={addTeamMember} className="bg-slate-900 text-white w-12 rounded-2xl hover:bg-slate-800 hover:scale-105 transition-all flex items-center justify-center shadow-lg">
-                                <Plus size={22} />
-                            </button>
-                        </div>
-                        
-                        <div className="flex flex-wrap gap-2 mt-2 min-h-[40px]">
-                            {formData.team.map((member, idx) => (
-                                <span key={idx} className="bg-white pl-4 pr-2 py-2 rounded-xl text-sm font-bold text-slate-700 flex items-center gap-3 border border-slate-200 shadow-sm animate-in zoom-in duration-300">
-                                    <span className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex flex-col items-center justify-center text-[10px] leading-tight">
-                                        <Users size={12}/>
+                    {/* Step 1: Identity */}
+                    {currentStep === 1 && (
+                        <div className="space-y-6">
+                            <ModernInput label={isRTL ? 'عنوان المشروع' : 'Project Title'} value={formData.title} onChange={(v: string) => setFormData({...formData, title: v})} isDark={isDark} inputBg={inputBg} icon={FileText} autoFocus />
+                            
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <ModernSelect label={isRTL ? 'التصنيف' : 'Category'} value={formData.category} options={['Maintenance', 'Cable Testing', 'Infrastructure', 'Tech Support', 'Emergency']} onChange={(v: string) => setFormData({...formData, category: v as ProjectCategory})} isDark={isDark} inputBg={inputBg} />
+                                <ModernSelect label={isRTL ? 'نوع التنفيذ' : 'Execution'} value={formData.type} options={['Internal Team', 'Outsourced', 'Hybrid']} onChange={(v: string) => setFormData({...formData, type: v})} isDark={isDark} inputBg={inputBg} />
+                            </div>
+
+                            {/* 🚀 Contract Mapping (New) */}
+                            <div className={`p-5 rounded-2xl border ${isDark ? 'bg-slate-800/30 border-slate-700' : 'bg-slate-50 border-slate-200'} space-y-4`}>
+                                <div className="flex items-center justify-between">
+                                    <label className={`text-xs font-bold uppercase tracking-wider px-1 ${textSub}`}>
+                                        {isRTL ? 'مقاول العقد الموحد (اختياري)' : 'Subcontractor (Optional)'}
+                                    </label>
+                                    <span className={`text-[10px] font-bold px-2 py-1 rounded-full ${formData.contractType === 'Direct' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}`}>
+                                        {formData.contractType === 'Direct' ? (isRTL ? 'عقد مباشر' : 'Direct Contract') : (isRTL ? 'مقاول باطن' : 'Subcontract')}
                                     </span>
-                                    <div className="flex flex-col text-left">
-                                        <span>{member.name}</span>
-                                        <span className="text-[10px] text-slate-400 font-normal">{member.role}</span>
-                                    </div>
-                                    <button onClick={() => removeTeamMember(idx)} className="p-1 hover:bg-red-50 text-slate-400 hover:text-red-500 rounded-full transition"><X size={14}/></button>
-                                </span>
-                            ))}
-                            {formData.team.length === 0 && <span className="text-slate-400 text-sm italic px-2 py-2">{lang === 'ar' ? 'لم يتم إضافة أعضاء بعد' : 'No members added yet'}</span>}
-                        </div>
-                    </div>
-
-                    {/* Equipment */}
-                    <div className="space-y-3 pt-6 border-t border-dashed border-slate-200">
-                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider px-1">{lang === 'ar' ? 'تخصيص المعدات' : 'Equipment Allocation'}</label>
-                        <ModernSelect 
-                            label=""
-                            options={['Generator 500kVA', 'Testing Van', 'Safety Kit', 'Cable Analyzer', 'Drill Set']}
-                            value=""
-                            onChange={(v) => { if(v && !formData.equipment.includes(v)) setFormData({...formData, equipment: [...formData.equipment, v]}) }}
-                            placeholder={lang === 'ar' ? 'اختر المعدات لإضافتها...' : 'Select equipment to add...'}
-                        />
-                        <div className="flex flex-wrap gap-2">
-                            {formData.equipment.map((eq, idx) => (
-                                <span key={idx} className="bg-slate-800 text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-2 shadow-md animate-in fade-in slide-in-from-bottom-2">
-                                    <HardHat size={12} className="text-yellow-400"/> {eq}
-                                </span>
-                            ))}
-                        </div>
-                    </div>
-                </div>
-            </div>
-          )}
-
-          {/* Step 5: Compliance */}
-          {currentStep === 5 && (
-            <div className="space-y-6 animate-in slide-in-from-bottom-8 fade-in duration-500">
-                <SectionHeader title={lang === 'ar' ? 'المخاطر والامتثال' : 'Risk & Compliance'} desc={lang === 'ar' ? 'الوثائق والتحقق من الاشتراطات' : 'Docs & Verification'} />
-                
-                <div className="bg-white p-8 rounded-[2rem] border border-slate-200 shadow-xl shadow-slate-200/50 space-y-8">
-                    {/* Upload */}
-                    <div 
-                        onClick={() => fileInputRef.current?.click()}
-                        className="group border-2 border-dashed border-slate-300 rounded-3xl p-10 text-center hover:bg-slate-50 hover:border-blue-400 transition-all duration-300 cursor-pointer relative overflow-hidden"
-                    >
-                        <div className="absolute inset-0 bg-blue-50/50 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
-                        <input type="file" ref={fileInputRef} className="hidden" onChange={() => alert('تم رفع الملف بنجاح (محاكاة)')} />
-                        <div className="relative z-10 flex flex-col items-center gap-3">
-                            <div className="w-16 h-16 bg-white rounded-2xl shadow-md flex items-center justify-center text-slate-400 group-hover:text-blue-600 group-hover:scale-110 transition-all duration-300">
-                                <UploadCloud size={32} />
-                            </div>
-                            <div>
-                                <h4 className="text-base font-bold text-slate-700 group-hover:text-blue-700 transition-colors">{lang === 'ar' ? 'اضغط لرفع ملفات العقد والمخططات' : 'Click to Upload Docs'}</h4>
-                                <p className="text-xs text-slate-400 mt-1">PDF, DWG, JPG (Max 20MB)</p>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Checklist */}
-                    <div className="space-y-4">
-                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider px-1">{lang === 'ar' ? 'قائمة التحقق الإلزامية' : 'Mandatory Checklist'}</label>
-                        {Object.keys(formData.complianceItems).map((key) => (
-                            <label key={key} className="flex items-center gap-4 p-4 bg-slate-50 rounded-2xl cursor-pointer hover:bg-white hover:shadow-md border border-transparent hover:border-slate-100 transition-all duration-200 select-none group">
-                                <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all duration-300 ${formData.complianceItems[key] ? 'bg-blue-600 border-blue-600 scale-110' : 'border-slate-300 bg-white group-hover:border-blue-400'}`}>
-                                    {formData.complianceItems[key] && <div className="text-white"><CheckCircle2 size={16}/></div>}
                                 </div>
-                                <input type="checkbox" className="hidden" checked={formData.complianceItems[key]} onChange={() => toggleCompliance(key)} />
-                                <span className={`flex-1 text-sm font-bold transition-colors ${formData.complianceItems[key] ? 'text-slate-800' : 'text-slate-500'}`}>{key}</span>
-                                <FileCheck size={18} className={`transition-colors ${formData.complianceItems[key] ? 'text-blue-600' : 'text-slate-300'}`}/>
-                            </label>
-                        ))}
-                    </div>
-                </div>
-            </div>
-          )}
-
-          {/* Action Buttons */}
-          <div className="flex justify-between items-center pt-8">
-            <button 
-                onClick={handleBack} 
-                disabled={currentStep === 1} 
-                className="px-8 py-4 rounded-2xl font-bold text-slate-500 hover:bg-white hover:shadow-md disabled:opacity-0 transition-all flex items-center gap-3"
-            >
-              {lang === 'ar' ? <ArrowRight size={20}/> : <ArrowLeft size={20}/>} 
-              {lang === 'ar' ? 'السابق' : 'Back'}
-            </button>
-            
-            <button 
-                onClick={handleNext} 
-                className={`px-10 py-4 rounded-2xl font-bold text-white shadow-xl shadow-slate-300 flex items-center gap-3 transition-all duration-300 hover:scale-105 active:scale-95 ${currentStep === 5 ? 'bg-green-600 hover:bg-green-500 shadow-green-200' : 'bg-slate-900 hover:bg-slate-800'}`}
-            >
-              {currentStep === 5 ? (lang === 'ar' ? 'اعتماد المشروع' : 'Submit Project') : (lang === 'ar' ? 'التالي' : 'Next Step')}
-              {currentStep !== 5 && (lang === 'ar' ? <ArrowLeft size={20}/> : <ArrowRight size={20}/>)}
-            </button>
-          </div>
-
-        </div>
-
-        {/* Right Column: AI Assistant (Floating) */}
-        <aside className="lg:col-span-3 space-y-6">
-          <div className="sticky top-32">
-            <div className="bg-white border border-purple-100 rounded-[1.5rem] shadow-xl shadow-purple-100/50 overflow-hidden relative group">
-                <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-purple-500 via-indigo-500 to-blue-500"></div>
-                <div className="p-6">
-                    <div className="flex items-center gap-3 mb-4">
-                        <div className="p-2.5 bg-purple-50 rounded-xl text-purple-600 group-hover:scale-110 transition-transform duration-500">
-                            <Sparkles size={20} />
+                                
+                                <div className="relative">
+                                    <select 
+                                        className={`w-full rounded-xl px-5 py-4 outline-none transition-all text-sm font-bold appearance-none cursor-pointer ${inputBg}`}
+                                        value={formData.subcontractorId}
+                                        onChange={(e) => handleSubcontractorChange(e.target.value)}
+                                    >
+                                        <option value="">{isRTL ? '-- بدون مقاول (يصنف كعقد مباشر) --' : '-- No Subcontractor (Direct) --'}</option>
+                                        <optgroup label={isRTL ? "المقاولين الحاليين" : "Existing Subcontractors"}>
+                                            {subcontractors.map(sub => <option key={sub.id} value={sub.id}>{sub.name}</option>)}
+                                        </optgroup>
+                                        <optgroup label="----">
+                                            <option value="NEW" className="text-blue-600 font-black">{isRTL ? '+ إضافة مقاول جديد' : '+ Add New Subcontractor'}</option>
+                                        </optgroup>
+                                    </select>
+                                    <Building2 className={`absolute ${isRTL ? 'left-4' : 'right-4'} top-4 text-slate-400 pointer-events-none`} size={20}/>
+                                </div>
+                            </div>
                         </div>
-                        <h3 className="font-bold text-slate-800 text-sm">مساعد الذكاء الاصطناعي</h3>
-                    </div>
-                    
-                    <p className="text-xs text-slate-500 leading-relaxed mb-6 font-medium">
-                        {lang === 'ar' 
-                        ? 'أدخل عنوان المشروع فقط، وسأقوم بتوليد الميزانية، الجدول الزمني، وتقييم المخاطر والمعدات تلقائياً.'
-                        : 'Enter the project title, and I will auto-generate budget, timeline, risks, and equipment for you.'}
-                    </p>
+                    )}
 
-                    <button 
-                        onClick={triggerAiSuggestion}
-                        disabled={isAiLoading}
-                        className="w-full py-3.5 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-xl text-xs font-bold shadow-lg shadow-purple-200 hover:shadow-purple-300 transition-all active:scale-95 flex items-center justify-center gap-2 group/btn"
-                    >
-                        {isAiLoading ? <Loader2 className="animate-spin" size={16}/> : <Cpu size={16} className="group-hover/btn:animate-pulse"/>}
-                        {isAiLoading ? (lang === 'ar' ? 'جاري التحليل...' : 'Analyzing...') : (lang === 'ar' ? 'توليد تلقائي ذكي' : 'Auto-Generate Details')}
+                    {/* Step 2: Timeline */}
+                    {currentStep === 2 && (
+                        <div className="space-y-6">
+                            <div className="grid grid-cols-2 gap-6">
+                                <ModernInput type="date" label={isRTL ? 'تاريخ البدء' : 'Start Date'} value={formData.startDate} onChange={(v: string) => setFormData({...formData, startDate: v})} isDark={isDark} inputBg={inputBg} />
+                                <ModernInput type="date" label={isRTL ? 'تاريخ الانتهاء' : 'End Date'} value={formData.endDate} onChange={(v: string) => setFormData({...formData, endDate: v})} isDark={isDark} inputBg={inputBg} />
+                            </div>
+                            <ModernInput type="number" label={isRTL ? 'الميزانية (ر.س)' : 'Budget (SAR)'} value={formData.budget} onChange={(v: string) => setFormData({...formData, budget: v})} icon={DollarSign} isDark={isDark} inputBg={inputBg} />
+                        </div>
+                    )}
+
+                    {/* Step 3: Location */}
+                    {currentStep === 3 && (
+                        <div className="space-y-6">
+                            <div className={`h-[400px] w-full rounded-[2rem] overflow-hidden relative z-0 border ${isDark ? 'border-slate-700' : 'border-slate-200'}`}>
+                                <ProjectMapPicker lat={formData.coordinates.lat} lng={formData.coordinates.lng} onLocationSelect={(lat, lng) => setFormData(prev => ({...prev, coordinates: {lat, lng}}))} />
+                                <div className="absolute top-4 left-4 right-4 z-10"><div className={`${glassCard} p-2 rounded-xl`}><ModernInput label="" placeholder={isRTL ? 'وصف الموقع...' : 'Location desc...'} value={formData.locationName} onChange={(v: string) => setFormData({...formData, locationName: v})} isDark={isDark} inputBg="bg-transparent border-none" icon={MapPin} /></div></div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Step 4: Managers & Resources */}
+                    {currentStep === 4 && (
+                        <div className="space-y-8">
+                            {/* Managers */}
+                            <div className="space-y-3">
+                                <label className={`text-xs font-bold uppercase tracking-wider px-1 ${textSub}`}>{isRTL ? 'تكليف مدراء المشروع (متعدد)' : 'Assign Project Managers'}</label>
+                                <ModernInput label="" placeholder={isRTL ? 'ابحث عن مدير...' : 'Search managers...'} value={managerSearch} onChange={(v: string) => setManagerSearch(v)} isDark={isDark} inputBg={inputBg} icon={Search} />
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[250px] overflow-y-auto pr-2 custom-scrollbar">
+                                    {loadingManagers ? (
+                                        <div className="col-span-2 py-8 flex justify-center"><Loader2 className="animate-spin text-blue-500" /></div>
+                                    ) : availableManagers.filter(m => m.full_name.toLowerCase().includes(managerSearch.toLowerCase())).map(mgr => {
+                                        const isSelected = formData.managers.some(m => m.id === mgr.id);
+                                        const isBusy = mgr.active_projects > 0;
+                                        return (
+                                            <div key={mgr.id} onClick={() => toggleManager(mgr)} className={`p-4 rounded-2xl border cursor-pointer transition-all flex items-center justify-between group ${isSelected ? 'bg-blue-600/10 border-blue-500 shadow-sm ring-1 ring-blue-500/20' : `${isDark ? 'bg-slate-800/50 border-slate-700' : 'bg-slate-50 border-slate-200 hover:bg-white'}`}`}>
+                                                <div className="flex items-center gap-3">
+                                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm ${isSelected ? 'bg-blue-600 text-white' : isDark ? 'bg-slate-700 text-slate-300' : 'bg-slate-200 text-slate-600'}`}>{mgr.full_name.charAt(0)}</div>
+                                                    <div>
+                                                        <div className={`text-sm font-bold ${isSelected ? 'text-blue-600 dark:text-blue-400' : textMain}`}>{mgr.full_name}</div>
+                                                        <div className="flex items-center gap-2 mt-1">
+                                                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded flex items-center gap-1 ${isBusy ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}><Briefcase size={10}/> {mgr.active_projects}</span>
+                                                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded flex items-center gap-1 bg-purple-100 text-purple-700`}><Star size={10}/> {mgr.completion_rate}%</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div className={`w-5 h-5 rounded border flex items-center justify-center transition ${isSelected ? 'bg-blue-600 border-blue-600 text-white' : 'border-slate-300'}`}>{isSelected && <CheckCircle2 size={14}/>}</div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+
+                            {/* Equipment */}
+                            <div className="space-y-3 pt-4 border-t border-dashed border-slate-200/20">
+                                <label className={`text-xs font-bold uppercase tracking-wider px-1 flex justify-between ${textSub}`}>
+                                    <span>{isRTL ? 'المعدات الرئيسية' : 'Key Equipment'}</span>
+                                    <span className="text-[10px] bg-slate-200 dark:bg-slate-700 px-2 py-0.5 rounded-full">{isRTL ? 'اختياري' : 'Optional'}</span>
+                                </label>
+                                <ModernSelect label="" options={['Generator 500kVA', 'Testing Van', 'Safety Kit', 'Cable Analyzer', 'Excavator']} value="" onChange={(v: string) => { if(v && !formData.equipment.includes(v)) setFormData({...formData, equipment: [...formData.equipment, v]}) }} isDark={isDark} inputBg={inputBg} placeholder={isRTL ? 'اختر معدات لربطها بالمشروع...' : 'Select equipment...'} />
+                                <div className="flex flex-wrap gap-2">
+                                    {formData.equipment.map((eq, i) => (
+                                        <span key={i} className="bg-amber-500/10 text-amber-600 border border-amber-500/20 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-2">
+                                            <HardHat size={14}/> {eq} <button onClick={() => setFormData(prev => ({...prev, equipment: prev.equipment.filter((_, idx) => idx !== i)}))} className="hover:text-red-500 ml-1"><X size={14}/></button>
+                                        </span>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Step 5: Compliance */}
+                    {currentStep === 5 && (
+                        <div className="space-y-6">
+                            <div onClick={() => fileInputRef.current?.click()} className={`group border-2 border-dashed rounded-[2rem] p-10 text-center transition-all cursor-pointer relative overflow-hidden ${isCompressing ? 'border-blue-500 bg-blue-50' : isDark ? 'border-slate-700 hover:border-blue-500 hover:bg-slate-800' : 'border-slate-300 hover:border-blue-500 hover:bg-blue-50'}`}>
+                                <input type="file" ref={fileInputRef} className="hidden" multiple accept="image/*,.pdf" onChange={handleFileChange} />
+                                <div className="flex flex-col items-center gap-4 relative z-10">
+                                    <div className="w-16 h-16 bg-blue-600/10 rounded-2xl flex items-center justify-center text-blue-600 group-hover:scale-110 transition-transform">{isCompressing ? <Loader2 className="animate-spin" size={32}/> : <UploadCloud size={32} />}</div>
+                                    <div><h4 className={`text-sm font-bold ${textMain}`}>{isCompressing ? (isRTL ? 'جاري الضغط...' : 'Compressing...') : (isRTL ? 'رفع ملفات (عقود، مخططات)' : 'Upload Files')}</h4></div>
+                                </div>
+                            </div>
+
+                            {uploadedFiles.length > 0 && (
+                                <div className="space-y-2 animate-in fade-in">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                        {uploadedFiles.map((file, idx) => (
+                                            <div key={idx} className={`p-3 rounded-xl border flex items-center justify-between ${isDark ? 'bg-slate-800/50 border-slate-700' : 'bg-slate-50 border-slate-200'}`}>
+                                                <div className="flex items-center gap-3 overflow-hidden">
+                                                    <div className={`p-2 rounded-lg ${file.type.includes('pdf') ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'}`}><FileIcon size={16}/></div>
+                                                    <div className="truncate"><div className={`text-xs font-bold truncate ${textMain}`}>{file.name}</div><div className={`text-[10px] ${textSub}`}>{(file.size / 1024 / 1024).toFixed(2)} MB</div></div>
+                                                </div>
+                                                <button onClick={() => setUploadedFiles(prev => prev.filter((_, i) => i !== idx))} className="p-2 hover:bg-red-100 text-slate-400 hover:text-red-500 rounded-lg"><X size={16}/></button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            <div className="space-y-3 pt-4 border-t border-slate-200/20">
+                                <label className={`text-xs font-bold uppercase tracking-wider px-1 ${textSub}`}>{isRTL ? 'الاشتراطات' : 'Checklist'}</label>
+                                {Object.keys(formData.complianceItems).map(key => (
+                                    <label key={key} className={`flex items-center gap-4 p-4 rounded-xl cursor-pointer border transition-all ${isDark ? 'bg-slate-800 border-slate-700 hover:bg-slate-700' : 'bg-slate-50 border-slate-200 hover:bg-white hover:shadow-sm'}`}>
+                                        <div className={`w-5 h-5 rounded border flex items-center justify-center transition ${formData.complianceItems[key] ? 'bg-blue-600 border-blue-600' : 'border-slate-400'}`}>
+                                            {formData.complianceItems[key] && <CheckCircle2 size={14} className="text-white"/>}
+                                        </div>
+                                        <input type="checkbox" className="hidden" checked={formData.complianceItems[key]} onChange={() => toggleCompliance(key)}/>
+                                        <span className={`text-sm font-bold ${textMain}`}>{key}</span>
+                                    </label>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                </div>
+
+                <div className="flex justify-between items-center pt-8 border-t border-slate-200/10 mt-8">
+                    <button onClick={handleBack} disabled={currentStep === 1 || isSubmitting} className={`px-6 py-3 rounded-xl font-bold text-sm transition flex items-center gap-2 ${currentStep === 1 ? 'opacity-0' : `${textSub} hover:${textMain}`}`}>
+                        {isRTL ? <ArrowRight size={18}/> : <ArrowLeft size={18}/>} {isRTL ? 'السابق' : 'Back'}
+                    </button>
+                    <button onClick={currentStep === 5 ? handleCreateProject : handleNext} disabled={isSubmitting} className={`px-8 py-3 rounded-xl font-bold text-sm text-white shadow-xl flex items-center gap-3 transition-all hover:scale-105 active:scale-95 disabled:opacity-70 disabled:hover:scale-100 ${currentStep === 5 ? 'bg-emerald-500 shadow-emerald-500/30' : 'bg-blue-600 shadow-blue-600/30'}`}>
+                        {isSubmitting ? <><Loader2 className="animate-spin" size={18}/> {isRTL ? 'جاري الحفظ...' : 'Saving...'}</> : (currentStep === 5 ? (isRTL ? 'اعتماد وإنشاء' : 'Submit Project') : (isRTL ? 'التالي' : 'Next Step'))}
+                        {!isSubmitting && currentStep !== 5 && (isRTL ? <ArrowLeft size={18}/> : <ArrowRight size={18}/>)}
                     </button>
                 </div>
-                
-                {/* Decorative Bottom */}
-                <div className="bg-purple-50/50 p-4 border-t border-purple-100">
-                    <div className="flex items-center gap-2 text-[10px] text-purple-400 font-bold justify-center">
-                        <Sparkles size={10} /> POWERED BY OPENAI
-                    </div>
-                </div>
-            </div>
-          </div>
-        </aside>
-
+            </motion.div>
+          </AnimatePresence>
+        </div>
       </main>
+
+      {/* --- نافذة إنشاء مقاول جديد (Modal) --- */}
+      <AnimatePresence>
+          {isNewSubModalOpen && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+                  <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className={`w-full max-w-md p-6 rounded-3xl shadow-2xl ${isDark ? 'bg-slate-900 border border-slate-700' : 'bg-white'}`}>
+                      <div className="flex justify-between items-center mb-6">
+                          <h3 className={`text-lg font-bold ${textMain}`}>{isRTL ? 'تسجيل مقاول جديد' : 'New Subcontractor'}</h3>
+                          <button onClick={() => {setIsNewSubModalOpen(false); setFormData(prev => ({...prev, subcontractorId: '', contractType: 'Direct'}))}} className="p-2 hover:bg-slate-100 rounded-full text-slate-500"><X size={20}/></button>
+                      </div>
+                      <div className="space-y-4">
+                          <ModernInput label={isRTL ? 'اسم الشركة / المقاول' : 'Company Name'} value={newSubName} onChange={setNewSubName} isDark={isDark} inputBg={inputBg} icon={Building2} autoFocus />
+                          <button onClick={createNewSubcontractor} disabled={isCreatingSub || !newSubName.trim()} className="w-full py-3.5 bg-blue-600 text-white font-bold rounded-xl flex justify-center items-center gap-2 hover:bg-blue-700 disabled:opacity-50 transition-all">
+                              {isCreatingSub ? <Loader2 className="animate-spin"/> : <CheckCircle2 size={18}/>}
+                              {isRTL ? 'حفظ وإضافة' : 'Save & Add'}
+                          </button>
+                      </div>
+                  </motion.div>
+              </div>
+          )}
+      </AnimatePresence>
     </div>
   );
 }
 
 // --- Modern UI Components ---
-
-function SectionHeader({ title, desc }: { title: string, desc: string }) {
-    return (
-        <div className="mb-2">
-            <h2 className="text-2xl font-black text-slate-900 tracking-tight">{title}</h2>
-            <p className="text-slate-500 text-sm mt-1 font-medium">{desc}</p>
-        </div>
-    );
-}
-
-interface ModernInputProps { label: string; placeholder?: string; value: string; onChange: (v: string) => void; icon?: any; type?: string; transparent?: boolean; autoFocus?: boolean; }
-function ModernInput({ label, placeholder, value, onChange, icon: Icon, type = "text", transparent = false, autoFocus = false }: ModernInputProps) {
+function ModernInput({ label, value, onChange, icon: Icon, type = "text", autoFocus = false, isDark, inputBg, placeholder }: any) {
     return (
         <div className="space-y-2 group">
-            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider px-1 transition-colors group-focus-within:text-blue-600">{label}</label>
+            {label && <label className={`text-xs font-bold uppercase tracking-wider px-1 transition-colors ${isDark ? 'text-slate-400 group-focus-within:text-blue-400' : 'text-slate-500 group-focus-within:text-blue-600'}`}>{label}</label>}
             <div className="relative">
-                {Icon && <Icon className="absolute right-5 top-4 text-slate-400 w-5 h-5 group-focus-within:text-blue-500 transition-colors duration-300" />}
-                <input 
-                    type={type}
-                    autoFocus={autoFocus}
-                    className={`w-full rounded-2xl px-5 py-4 outline-none transition-all duration-300 text-sm font-bold text-slate-800 placeholder:text-slate-400 placeholder:font-normal
-                    ${transparent ? 'bg-white/80 backdrop-blur border border-white focus:bg-white shadow-sm' : 'bg-slate-50 border border-slate-200 focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10'}
-                    ${Icon ? 'pr-14' : ''}`}
-                    placeholder={placeholder}
-                    value={value}
-                    onChange={(e) => onChange(e.target.value)}
-                />
+                {Icon && <Icon className={`absolute ${label === '' ? 'left-4 top-3.5' : 'right-4 top-3.5'} text-slate-400 w-5 h-5 group-focus-within:text-blue-500 transition-colors`} />}
+                <input type={type} placeholder={placeholder} autoFocus={autoFocus} className={`w-full rounded-xl px-5 py-3.5 outline-none transition-all duration-300 text-sm font-bold ${inputBg} ${Icon ? (label === '' ? 'pl-12' : 'pr-12') : ''}`} value={value} onChange={(e) => onChange(e.target.value)} />
             </div>
         </div>
     );
 }
 
-interface ModernSelectProps { label: string; options: string[]; value: string; onChange: (v: string) => void; placeholder?: string; }
-function ModernSelect({ label, options, value, onChange, placeholder }: ModernSelectProps) {
+function ModernSelect({ label, options, value, onChange, isDark, inputBg, placeholder }: any) {
     return (
         <div className="space-y-2 group">
-            {label && <label className="text-xs font-bold text-slate-500 uppercase tracking-wider px-1 transition-colors group-focus-within:text-blue-600">{label}</label>}
+            {label && <label className={`text-xs font-bold uppercase tracking-wider px-1 transition-colors ${isDark ? 'text-slate-400 group-focus-within:text-blue-400' : 'text-slate-500 group-focus-within:text-blue-600'}`}>{label}</label>}
             <div className="relative">
-                <select 
-                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 outline-none focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all text-sm font-bold text-slate-800 appearance-none cursor-pointer"
-                    value={value}
-                    onChange={(e) => onChange(e.target.value)}
-                >
-                    {placeholder && <option value="" disabled>{placeholder}</option>}
+                <select className={`w-full rounded-xl px-5 py-3.5 outline-none transition-all text-sm font-bold appearance-none cursor-pointer ${inputBg}`} value={value} onChange={(e) => onChange(e.target.value)}>
+                    {placeholder ? <option value="" disabled>{placeholder}</option> : <option value="" disabled>Select...</option>}
                     {options.map((opt: string) => <option key={opt} value={opt}>{opt}</option>)}
                 </select>
-                <ChevronDown className="absolute left-5 top-4 text-slate-400 pointer-events-none group-focus-within:rotate-180 transition-transform duration-300" size={20}/>
+                <ChevronDown className="absolute left-4 top-4 text-slate-400 pointer-events-none" size={18}/>
             </div>
         </div>
     );

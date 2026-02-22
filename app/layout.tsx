@@ -12,6 +12,8 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+// ✅ هذا الجزء هو سبب الخطأ إذا كان الملف يحتوي على 'use client'
+// لذلك تأكد أن هذا الملف خالي تماماً من 'use client' في الأعلى
 export const metadata: Metadata = {
   title: "GMS Platform",
   description: "Industrial Solutions",

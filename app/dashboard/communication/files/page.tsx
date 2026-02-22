@@ -1,15 +1,17 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
+import { supabase } from '@/lib/supabase';
 import { 
   Folder, FileText, Image, MoreVertical, Download, UploadCloud, 
   Search, Filter, ChevronRight, ChevronLeft, ArrowUp, Share2, 
   Trash2, Eye, File, CheckCircle2, Clock, AlertTriangle, 
-  Shield, X, Save, RefreshCw, FileImage, FileSpreadsheet, Globe
+  Shield, X, Save, RefreshCw, FileImage, FileSpreadsheet, Globe, Loader2
 } from 'lucide-react';
+import { useDashboard } from '../../layout';
 
 // --- Types ---
-type FileType = 'PDF' | 'DWG' | 'XLSX' | 'DOCX' | 'JPG' | 'PNG';
+type FileType = 'PDF' | 'DWG' | 'XLSX' | 'DOCX' | 'JPG' | 'PNG' | string;
 type FileStatus = 'Approved' | 'Draft' | 'Under Review' | 'Expired';
 type Confidentiality = 'Internal' | 'Confidential' | 'Public';
 
@@ -18,15 +20,13 @@ interface DMSFile {
   name: string;
   type: FileType;
   size: string;
+  file_url: string; // الرابط الفعلي للملف
   uploadedBy: string;
   uploadDate: string;
-  folderId: string; // 'root' or specific folder ID
+  folderId: string;
   status: FileStatus;
   confidentiality: Confidentiality;
-  version: string;
-  linkedEntity?: string; // Project/Task ID
-  description?: string;
-  tags?: string[];
+  linkedEntity?: string;
   downloads: number;
 }
 
@@ -40,11 +40,14 @@ interface DMSFolder {
 }
 
 export default function FilesPage() {
-  const [lang, setLang] = useState<'ar' | 'en'>('ar');
+  const { lang, isDark, user } = useDashboard();
+  const isRTL = lang === 'ar';
+
   const [currentFolderId, setCurrentFolderId] = useState<string>('root');
   const [files, setFiles] = useState<DMSFile[]>([]);
   const [folders, setFolders] = useState<DMSFolder[]>([]);
   const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
   
   // Selection & Search
   const [searchTerm, setSearchTerm] = useState('');
@@ -57,83 +60,147 @@ export default function FilesPage() {
   // Upload State
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
-  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadFile, setUploadFile] = useState<globalThis.File | null>(null);
   const [uploadMeta, setUploadMeta] = useState({ folder: 'root', confidentiality: 'Internal', linkedEntity: '' });
 
-  // --- Mock Data ---
-  useEffect(() => {
-    setTimeout(() => {
-      setFolders([
-        { id: 'FLD-1', name: lang === 'ar' ? 'العقود والاتفاقيات' : 'Contracts & Agreements', count: 12, size: '45 MB', updated: '2024-02-01', category: 'Contracts' },
-        { id: 'FLD-2', name: lang === 'ar' ? 'المخططات الهندسية' : 'Engineering Drawings', count: 45, size: '1.2 GB', updated: '2024-02-05', category: 'Engineering' },
-        { id: 'FLD-3', name: lang === 'ar' ? 'تقارير الجودة QC' : 'QC Reports', count: 28, size: '120 MB', updated: 'Yesterday', category: 'QC' },
-        { id: 'FLD-4', name: lang === 'ar' ? 'صور الموقع' : 'Site Photos', count: 156, size: '850 MB', updated: 'Today', category: 'Site' },
-      ]);
+  // --- 1. Fetch Real Data ---
+  const fetchFilesData = async () => {
+    setLoading(true);
+    try {
+        // جلب المجلدات الثابتة (يمكن جعلها ديناميكية لاحقاً)
+        setFolders([
+            { id: 'Contracts', name: isRTL ? 'العقود والاتفاقيات' : 'Contracts', count: 0, size: '0 MB', updated: new Date().toLocaleDateString(), category: 'Contracts' },
+            { id: 'Engineering', name: isRTL ? 'المخططات الهندسية' : 'Engineering', count: 0, size: '0 MB', updated: new Date().toLocaleDateString(), category: 'Engineering' },
+            { id: 'QC', name: isRTL ? 'تقارير الجودة' : 'QC Reports', count: 0, size: '0 MB', updated: new Date().toLocaleDateString(), category: 'QC' },
+            { id: 'Site', name: isRTL ? 'صور الموقع' : 'Site Photos', count: 0, size: '0 MB', updated: new Date().toLocaleDateString(), category: 'Site' },
+        ]);
 
-      setFiles([
-        { id: 'F-101', name: 'تقرير_نهاية_الشهر_يناير.pdf', type: 'PDF', size: '2.4 MB', uploadedBy: 'Ahmed', uploadDate: '2024-02-01', folderId: 'root', status: 'Approved', confidentiality: 'Internal', version: 'v1.0', linkedEntity: 'PRJ-001', downloads: 5 },
-        { id: 'F-102', name: 'مخطط_الدور_الارضي_معدل.dwg', type: 'DWG', size: '15 MB', uploadedBy: 'Eng. Sarah', uploadDate: '2024-02-04', folderId: 'root', status: 'Under Review', confidentiality: 'Confidential', version: 'v2.3', linkedEntity: 'PRJ-001', downloads: 12 },
-        { id: 'F-103', name: 'صورة_تركيب_اللوحات.jpg', type: 'JPG', size: '4.1 MB', uploadedBy: 'Saeed', uploadDate: 'Yesterday', folderId: 'FLD-4', status: 'Approved', confidentiality: 'Internal', version: 'v1.0', linkedEntity: 'INS-102', downloads: 2 },
-        { id: 'F-104', name: 'كشف_رواتب_فبراير.xlsx', type: 'XLSX', size: '0.8 MB', uploadedBy: 'Finance', uploadDate: 'Today', folderId: 'root', status: 'Draft', confidentiality: 'Confidential', version: 'v0.1', linkedEntity: '-', downloads: 0 },
-      ]);
-      setLoading(false);
-    }, 800);
-  }, [lang]);
+        // جلب الملفات من قاعدة البيانات مع اسم الرافع
+        const { data: filesData, error: filesErr } = await supabase
+            .from('dms_files')
+            .select(`*, profiles:uploaded_by(full_name)`)
+            .order('created_at', { ascending: false });
 
-  // --- Actions ---
-  const handleUploadFile = () => {
-    if (!uploadFile) return;
-    
-    let progress = 0;
-    const interval = setInterval(() => {
-        progress += 10;
-        setUploadProgress(progress);
-        if (progress >= 100) {
-            clearInterval(interval);
-            
-            const newFile: DMSFile = {
-                id: `F-${Date.now()}`,
-                name: uploadFile.name,
-                type: (uploadFile.name.split('.').pop()?.toUpperCase() as FileType) || 'PDF',
-                size: (uploadFile.size / 1024 / 1024).toFixed(2) + ' MB',
-                uploadedBy: 'Current User',
-                uploadDate: new Date().toLocaleDateString(),
-                folderId: uploadMeta.folder,
-                status: 'Draft',
-                confidentiality: uploadMeta.confidentiality as Confidentiality,
-                version: 'v1.0',
-                linkedEntity: uploadMeta.linkedEntity || '-',
-                downloads: 0
-            };
-            
-            setFiles([newFile, ...files]);
-            setTimeout(() => {
-                setIsUploadOpen(false);
-                setUploadProgress(0);
-                setUploadFile(null);
-                alert(lang === 'ar' ? 'تم رفع الملف بنجاح' : 'File uploaded successfully');
-            }, 500);
+        if (filesErr) throw filesErr;
+
+        if (filesData) {
+            const formattedFiles: DMSFile[] = filesData.map(f => ({
+                id: f.id,
+                name: f.name,
+                type: f.type,
+                size: f.size,
+                file_url: f.file_url,
+                uploadedBy: f.profiles?.full_name || 'Unknown',
+                uploadDate: new Date(f.created_at).toLocaleDateString(isRTL ? 'ar-SA' : 'en-US'),
+                folderId: f.folder_id,
+                status: f.status as FileStatus,
+                confidentiality: f.confidentiality as Confidentiality,
+                linkedEntity: f.linked_entity,
+                downloads: f.downloads || 0
+            }));
+            setFiles(formattedFiles);
         }
-    }, 200);
-  };
-
-  const handleDownload = (file: DMSFile) => {
-    alert(lang === 'ar' ? `جاري تحميل ${file.name}...` : `Downloading ${file.name}...`);
-    setFiles(prev => prev.map(f => f.id === file.id ? { ...f, downloads: f.downloads + 1 } : f));
-  };
-
-  const handleDelete = (id: string) => {
-    if (confirm(lang === 'ar' ? 'هل أنت متأكد من حذف هذا الملف؟' : 'Are you sure you want to delete this file?')) {
-        setFiles(prev => prev.filter(f => f.id !== id));
-        setIsDetailsOpen(false);
+    } catch (error: any) {
+        console.error("Error fetching files:", error.message);
+    } finally {
+        setLoading(false);
     }
   };
 
-  const handleShare = () => {
-    alert(lang === 'ar' ? 'تم نسخ رابط المشاركة الآمن' : 'Secure share link copied');
+  useEffect(() => {
+    fetchFilesData();
+  }, [user, isRTL]);
+
+  // --- 2. Real Upload Logic (To Supabase Storage & DB) ---
+  const handleUploadFile = async () => {
+    if (!uploadFile || !user) return;
+    setUploadProgress(10); // بدء وهمي للبروجرس
+
+    try {
+        const fileExt = uploadFile.name.split('.').pop()?.toUpperCase() || 'UNKNOWN';
+        const fileSizeMB = (uploadFile.size / 1024 / 1024).toFixed(2) + ' MB';
+        const fileNameSafe = `${Date.now()}_${uploadFile.name.replace(/\s+/g, '_')}`; // إزالة المسافات من الاسم
+
+        // 1. Upload to Supabase Storage (Bucket: company_documents)
+        const { data: storageData, error: storageError } = await supabase.storage
+            .from('company_documents')
+            .upload(`uploads/${fileNameSafe}`, uploadFile, {
+                cacheControl: '3600',
+                upsert: false
+            });
+
+        if (storageError) throw storageError;
+        setUploadProgress(60);
+
+        // الحصول على الرابط العام للملف
+        const { data: publicUrlData } = supabase.storage.from('company_documents').getPublicUrl(storageData.path);
+        const fileUrl = publicUrlData.publicUrl;
+
+        // 2. Insert metadata into Database
+        const { error: dbError } = await supabase.from('dms_files').insert({
+            name: uploadFile.name,
+            type: fileExt,
+            size: fileSizeMB,
+            file_url: fileUrl,
+            uploaded_by: user.id,
+            folder_id: uploadMeta.folder,
+            confidentiality: uploadMeta.confidentiality,
+            linked_entity: uploadMeta.linkedEntity || '-',
+            status: 'Under Review'
+        });
+
+        if (dbError) throw dbError;
+
+        setUploadProgress(100);
+        setTimeout(() => {
+            setIsUploadOpen(false);
+            setUploadProgress(0);
+            setUploadFile(null);
+            fetchFilesData(); // تحديث القائمة
+            alert(isRTL ? 'تم رفع الملف وحفظه بنجاح' : 'File uploaded and saved successfully');
+        }, 500);
+
+    } catch (error: any) {
+        console.error("Upload error:", error);
+        alert(isRTL ? `خطأ في الرفع: تأكد من إنشاء Bucket باسم company_documents\n\n${error.message}` : `Upload Error: ${error.message}`);
+        setUploadProgress(0);
+    }
   };
 
-  const toggleLang = () => setLang(prev => prev === 'ar' ? 'en' : 'ar');
+  const handleDownload = async (file: DMSFile) => {
+      // زيادة عدد التحميلات في قاعدة البيانات
+      await supabase.from('dms_files').update({ downloads: file.downloads + 1 }).eq('id', file.id);
+      
+      // فتح الملف في نافذة جديدة (يقوم المتصفح بتحميله إذا كان غير مدعوم للعرض)
+      window.open(file.file_url, '_blank');
+      fetchFilesData(); // لتحديث العداد
+  };
+
+  const handleDelete = async (id: string, fileUrl: string) => {
+    if (confirm(isRTL ? 'هل أنت متأكد من حذف هذا الملف نهائياً؟' : 'Permanently delete this file?')) {
+        try {
+            // 1. حذف من قاعدة البيانات
+            await supabase.from('dms_files').delete().eq('id', id);
+            
+            // 2. محاولة الحذف من الـ Storage (اختياري)
+            const pathParts = fileUrl.split('company_documents/');
+            if (pathParts.length > 1) {
+                const filePath = pathParts[1];
+                await supabase.storage.from('company_documents').remove([filePath]);
+            }
+
+            setFiles(prev => prev.filter(f => f.id !== id));
+            setIsDetailsOpen(false);
+        } catch (error) {
+            console.error("Delete error", error);
+        }
+    }
+  };
+
+  const handleShare = (fileUrl: string) => {
+    navigator.clipboard.writeText(fileUrl);
+    alert(isRTL ? 'تم نسخ الرابط بنجاح' : 'Link copied to clipboard');
+  };
 
   const filteredFiles = files.filter(f => 
     (f.folderId === currentFolderId) &&
@@ -141,80 +208,80 @@ export default function FilesPage() {
   );
 
   const currentFolderName = currentFolderId === 'root' 
-    ? (lang === 'ar' ? 'الملفات الرئيسية' : 'Root') 
+    ? (isRTL ? 'الملفات الرئيسية' : 'Root') 
     : folders.find(f => f.id === currentFolderId)?.name;
 
-  // --- Helper: File Icon ---
+  // --- UI Helpers ---
+  const bgMain = isDark ? "bg-slate-950" : "bg-slate-50";
+  const textMain = isDark ? "text-white" : "text-slate-900";
+  const textSub = isDark ? "text-slate-400" : "text-slate-500";
+  const cardBg = isDark ? "bg-slate-900/60 border-slate-800" : "bg-white border-slate-200";
+
   const getFileIcon = (type: string) => {
-      if (['JPG', 'PNG'].includes(type)) return <FileImage className="text-purple-600" size={20}/>;
-      if (['XLSX', 'CSV'].includes(type)) return <FileSpreadsheet className="text-green-600" size={20}/>;
-      if (['DWG', 'CAD'].includes(type)) return <DraftingCompassIcon className="text-orange-600" size={20}/>;
-      if (['PDF'].includes(type)) return <FileText className="text-red-600" size={20}/>;
-      return <File className="text-slate-500" size={20}/>;
+      const ext = type.toUpperCase();
+      if (['JPG', 'PNG', 'JPEG'].includes(ext)) return <FileImage className="text-purple-500" size={24}/>;
+      if (['XLSX', 'CSV', 'XLS'].includes(ext)) return <FileSpreadsheet className="text-emerald-500" size={24}/>;
+      if (['DWG', 'CAD'].includes(ext)) return <DraftingCompassIcon className="text-amber-500" size={24}/>;
+      if (['PDF'].includes(ext)) return <FileText className="text-red-500" size={24}/>;
+      return <File className="text-blue-500" size={24}/>;
   };
 
   const getStatusBadge = (status: FileStatus) => {
       const styles = {
-          'Approved': 'bg-green-100 text-green-700',
-          'Draft': 'bg-slate-100 text-slate-600',
-          'Under Review': 'bg-amber-100 text-amber-700',
-          'Expired': 'bg-red-100 text-red-700'
+          'Approved': isDark ? 'bg-emerald-900/30 text-emerald-400 border-emerald-800' : 'bg-emerald-50 text-emerald-700 border-emerald-200',
+          'Draft': isDark ? 'bg-slate-800 text-slate-400 border-slate-700' : 'bg-slate-100 text-slate-600 border-slate-200',
+          'Under Review': isDark ? 'bg-amber-900/30 text-amber-400 border-amber-800' : 'bg-amber-50 text-amber-700 border-amber-200',
+          'Expired': isDark ? 'bg-red-900/30 text-red-400 border-red-800' : 'bg-red-50 text-red-700 border-red-200'
       };
-      return <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${styles[status]}`}>{status}</span>;
+      return <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${styles[status]}`}>{isRTL ? {'Approved':'معتمد','Draft':'مسودة','Under Review':'قيد المراجعة','Expired':'منتهي'}[status] : status}</span>;
   };
 
   return (
-    <div className={`min-h-screen bg-slate-50 font-sans text-slate-800 ${lang === 'ar' ? 'dir-rtl' : 'dir-ltr'}`} dir={lang === 'ar' ? 'rtl' : 'ltr'}>
+    <div className={`min-h-screen font-sans ${bgMain} ${isRTL ? 'dir-rtl' : 'dir-ltr'}`} dir={isRTL ? 'rtl' : 'ltr'}>
       
-      {/* --- Section 1: Command Header --- */}
-      <div className="bg-white border-b border-slate-200 px-6 py-5 sticky top-0 z-20 shadow-sm">
+      {/* --- Command Header --- */}
+      <div className={`border-b px-6 py-5 sticky top-0 z-20 backdrop-blur-xl ${isDark ? 'bg-slate-950/80 border-slate-800' : 'bg-white/80 border-slate-200 shadow-sm'}`}>
         <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-6">
           <div>
-            <h1 className="text-2xl font-black text-slate-900 flex items-center gap-2">
+            <h1 className={`text-2xl font-black flex items-center gap-2 ${textMain}`}>
               <Folder className="text-yellow-500" fill="currentColor" />
-              {lang === 'ar' ? 'إدارة المستندات والملفات' : 'Document Management System'}
+              {isRTL ? 'خزنة المستندات والملفات' : 'Document Vault (DMS)'}
             </h1>
-            <p className="text-sm text-slate-500 font-medium mt-1">
-              {lang === 'ar' ? 'الأرشيف المركزي للمشاريع والعمليات الميدانية' : 'Central archive for projects and field operations'}
+            <p className={`text-sm font-medium mt-1 ${textSub}`}>
+              {isRTL ? 'الأرشيف المركزي المؤمن للمشاريع والعمليات الميدانية' : 'Central secured archive for projects and field operations'}
             </p>
           </div>
           <div className="flex gap-2">
-             <button onClick={toggleLang} className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-200 transition">
-               <Globe size={14} /> {lang === 'ar' ? 'English' : 'عربي'}
-             </button>
-             <button onClick={() => setIsUploadOpen(true)} className="bg-blue-600 text-white px-5 py-2.5 rounded-xl font-bold text-sm hover:bg-blue-700 flex items-center gap-2 shadow-lg shadow-blue-200 transition active:scale-95">
-                <UploadCloud size={18} /> {lang === 'ar' ? 'رفع ملف' : 'Upload File'}
+             <button onClick={() => setIsUploadOpen(true)} className="bg-blue-600 text-white px-5 py-2.5 rounded-xl font-bold text-sm hover:bg-blue-700 flex items-center gap-2 shadow-lg shadow-blue-500/20 transition active:scale-95">
+                <UploadCloud size={18} /> {isRTL ? 'رفع ملف' : 'Upload File'}
              </button>
           </div>
         </div>
 
         {/* Storage Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-            <StatCard label={lang === 'ar' ? 'إجمالي الملفات' : 'Total Files'} value={files.length + 1500} color="blue" icon={File} />
-            <StatCard label={lang === 'ar' ? 'المساحة المستخدمة' : 'Storage Used'} value="45.2 GB" color="amber" icon={DatabaseIcon} />
-            <StatCard label={lang === 'ar' ? 'بانتظار الاعتماد' : 'Pending Approval'} value="12" color="red" icon={Clock} />
-            <StatCard label={lang === 'ar' ? 'أحدث الإضافات' : 'Recent Uploads'} value="8" color="green" icon={ArrowUp} />
+            <StatCard isDark={isDark} label={isRTL ? 'إجمالي الملفات' : 'Total Files'} value={files.length} color="blue" icon={File} />
+            <StatCard isDark={isDark} label={isRTL ? 'مجلدات رئيسية' : 'Main Folders'} value={folders.length} color="amber" icon={Folder} />
+            <StatCard isDark={isDark} label={isRTL ? 'بانتظار المراجعة' : 'Under Review'} value={files.filter(f=>f.status==='Under Review').length} color="red" icon={Clock} />
+            <StatCard isDark={isDark} label={isRTL ? 'التحميلات' : 'Total Downloads'} value={files.reduce((a,c)=>a+c.downloads,0)} color="emerald" icon={Download} />
         </div>
 
         {/* Search & Navigation */}
-        <div className="flex gap-2 items-center bg-slate-50 p-1 rounded-xl border border-slate-200">
+        <div className={`flex gap-2 items-center p-1.5 rounded-xl border ${isDark ? 'bg-slate-900 border-slate-700' : 'bg-slate-50 border-slate-200'}`}>
             {currentFolderId !== 'root' && (
-                <button onClick={() => setCurrentFolderId('root')} className="px-3 py-2 hover:bg-white rounded-lg text-slate-500 hover:text-slate-800 transition flex items-center gap-1 font-bold text-sm">
-                    <ArrowUp size={16}/> {lang === 'ar' ? 'للأعلى' : 'Up'}
+                <button onClick={() => setCurrentFolderId('root')} className={`px-3 py-2 rounded-lg transition flex items-center gap-1 font-bold text-sm ${isDark ? 'text-slate-300 hover:bg-slate-800' : 'text-slate-600 hover:bg-white'}`}>
+                    <ArrowUp size={16}/> {isRTL ? 'للأعلى' : 'Up'}
                 </button>
             )}
-            <div className="h-6 w-px bg-slate-300 mx-1"></div>
+            <div className={`h-6 w-px mx-1 ${isDark ? 'bg-slate-700' : 'bg-slate-300'}`}></div>
             <div className="relative flex-1">
-                <Search className="absolute right-3 top-2.5 text-slate-400 w-4 h-4 rtl:right-3 ltr:left-3" />
+                <Search className={`absolute top-2.5 w-4 h-4 ${isDark ? 'text-slate-500' : 'text-slate-400'} ${isRTL ? 'right-3' : 'left-3'}`} />
                 <input 
-                    type="text" 
-                    placeholder={lang === 'ar' ? 'بحث في المستندات...' : 'Search documents...'} 
-                    className="w-full bg-transparent px-10 py-2 text-sm outline-none font-medium"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
+                    type="text" placeholder={isRTL ? 'بحث في المستندات...' : 'Search documents...'} 
+                    className={`w-full bg-transparent py-2 text-sm outline-none font-medium ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-900 placeholder-slate-400'} ${isRTL ? 'pr-10 pl-4' : 'pl-10 pr-4'}`}
+                    value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
                 />
             </div>
-            <button className="p-2 hover:bg-white rounded-lg text-slate-500 transition"><Filter size={18}/></button>
         </div>
       </div>
 
@@ -222,152 +289,145 @@ export default function FilesPage() {
       <div className="p-6 space-y-8">
         
         {/* Breadcrumb */}
-        <div className="flex items-center gap-2 text-sm font-bold text-slate-500">
-            <Folder size={16} className="text-slate-400"/>
+        <div className={`flex items-center gap-2 text-sm font-bold ${textSub}`}>
+            <Folder size={16} className={isDark ? 'text-slate-500' : 'text-slate-400'}/>
             <span>/</span>
-            <span className="text-slate-800">{currentFolderName}</span>
+            <span className={textMain}>{currentFolderName}</span>
         </div>
 
-        {/* Folders Grid (Only visible in Root) */}
+        {/* Folders Grid */}
         {currentFolderId === 'root' && !searchTerm && (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {folders.map(folder => (
+                {folders.map(folder => {
+                    const fCount = files.filter(f => f.folderId === folder.id).length;
+                    return(
                     <div 
                         key={folder.id} 
                         onClick={() => setCurrentFolderId(folder.id)}
-                        className="bg-white p-5 rounded-2xl border border-slate-200 hover:shadow-md hover:border-blue-300 cursor-pointer transition group text-center relative overflow-hidden"
+                        className={`p-5 rounded-2xl border cursor-pointer transition group text-center relative overflow-hidden ${cardBg} ${isDark ? 'hover:border-blue-500/50 hover:bg-slate-800' : 'hover:shadow-md hover:border-blue-300'}`}
                     >
-                        <div className="absolute top-3 right-3 text-[10px] font-bold bg-slate-50 px-2 py-0.5 rounded text-slate-400 border border-slate-100">{folder.category}</div>
                         <Folder size={48} className="text-yellow-400 mx-auto mb-3 group-hover:scale-110 transition-transform drop-shadow-sm" fill="currentColor" fillOpacity={0.2} />
-                        <div className="font-bold text-slate-800 text-sm">{folder.name}</div>
-                        <div className="text-xs text-slate-400 mt-1">{folder.count} {lang === 'ar' ? 'ملف' : 'files'} • {folder.size}</div>
+                        <div className={`font-bold text-sm ${textMain}`}>{folder.name}</div>
+                        <div className={`text-xs mt-1 ${textSub}`}>{fCount} {isRTL ? 'ملفات' : 'files'}</div>
                     </div>
-                ))}
+                )})}
             </div>
         )}
 
-        {/* Files List (Enterprise Table) */}
-        <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
-            <table className="w-full text-left rtl:text-right">
-                <thead className="bg-slate-50 text-slate-500 text-xs font-bold border-b border-slate-200">
-                    <tr>
-                        <th className="p-4 w-10"><input type="checkbox" className="w-4 h-4 rounded border-slate-300"/></th>
-                        <th className="p-4">{lang === 'ar' ? 'اسم الملف' : 'File Name'}</th>
-                        <th className="p-4">{lang === 'ar' ? 'النوع & الحجم' : 'Type & Size'}</th>
-                        <th className="p-4">{lang === 'ar' ? 'بواسطة' : 'Uploaded By'}</th>
-                        <th className="p-4">{lang === 'ar' ? 'الارتباط' : 'Linked Entity'}</th>
-                        <th className="p-4">{lang === 'ar' ? 'الحالة' : 'Status'}</th>
-                        <th className="p-4 text-end">{lang === 'ar' ? 'إجراءات' : 'Actions'}</th>
-                    </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                    {filteredFiles.length === 0 ? (
-                        <tr><td colSpan={7} className="p-10 text-center text-slate-400 font-medium">No files found in this folder.</td></tr>
-                    ) : filteredFiles.map(file => (
-                        <tr key={file.id} className={`hover:bg-blue-50/50 transition group ${activeFile?.id === file.id ? 'bg-blue-50' : ''}`}>
-                            <td className="p-4"><input type="checkbox" className="w-4 h-4 rounded border-slate-300"/></td>
-                            <td className="p-4">
-                                <div className="flex items-center gap-3 cursor-pointer" onClick={() => { setActiveFile(file); setIsDetailsOpen(true); }}>
-                                    <div className="p-2 bg-white rounded-lg border border-slate-100 shadow-sm">{getFileIcon(file.type)}</div>
-                                    <div>
-                                        <div className="font-bold text-slate-800 text-sm hover:text-blue-600 transition">{file.name}</div>
-                                        {file.confidentiality === 'Confidential' && <span className="text-[10px] text-red-600 font-bold bg-red-50 px-1.5 rounded flex items-center gap-1 w-fit mt-0.5"><Shield size={10}/> Confidential</span>}
-                                    </div>
-                                </div>
-                            </td>
-                            <td className="p-4">
-                                <div className="text-xs font-bold text-slate-600">{file.type}</div>
-                                <div className="text-[10px] text-slate-400 font-mono">{file.size}</div>
-                            </td>
-                            <td className="p-4 text-xs">
-                                <div className="font-bold text-slate-700">{file.uploadedBy}</div>
-                                <div className="text-slate-400">{file.uploadDate}</div>
-                            </td>
-                            <td className="p-4">
-                                <span className="text-xs bg-slate-100 px-2 py-1 rounded text-slate-600 font-mono">{file.linkedEntity}</span>
-                            </td>
-                            <td className="p-4">{getStatusBadge(file.status)}</td>
-                            <td className="p-4 text-end">
-                                <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <button onClick={() => handleDownload(file)} className="p-2 bg-white border border-slate-200 rounded-lg text-slate-500 hover:text-blue-600 hover:border-blue-300 transition shadow-sm" title="Download">
-                                        <Download size={16}/>
-                                    </button>
-                                    <button onClick={() => { setActiveFile(file); setIsDetailsOpen(true); }} className="p-2 bg-white border border-slate-200 rounded-lg text-slate-500 hover:text-slate-800 hover:border-slate-400 transition shadow-sm" title="Details">
-                                        <Eye size={16}/>
-                                    </button>
-                                </div>
-                            </td>
+        {/* Files List */}
+        <div className={`rounded-2xl border overflow-hidden shadow-sm ${cardBg}`}>
+            <div className="overflow-x-auto">
+                <table className={`w-full text-sm ${isRTL ? 'text-right' : 'text-left'}`}>
+                    <thead className={`text-xs font-bold border-b ${isDark ? 'bg-slate-900/50 text-slate-400 border-slate-800' : 'bg-slate-50 text-slate-500 border-slate-200'}`}>
+                        <tr>
+                            <th className="p-4 w-10"><input type="checkbox" className="w-4 h-4 rounded border-slate-300"/></th>
+                            <th className="p-4">{isRTL ? 'اسم الملف' : 'File Name'}</th>
+                            <th className="p-4">{isRTL ? 'النوع & الحجم' : 'Type & Size'}</th>
+                            <th className="p-4">{isRTL ? 'بواسطة' : 'Uploaded By'}</th>
+                            <th className="p-4">{isRTL ? 'الارتباط' : 'Linked Entity'}</th>
+                            <th className="p-4">{isRTL ? 'الحالة' : 'Status'}</th>
+                            <th className={`p-4 ${isRTL ? 'text-left' : 'text-right'}`}>{isRTL ? 'إجراءات' : 'Actions'}</th>
                         </tr>
-                    ))}
-                </tbody>
-            </table>
+                    </thead>
+                    <tbody className={`divide-y ${isDark ? 'divide-slate-800/50' : 'divide-slate-100'}`}>
+                        {loading ? (
+                            <tr><td colSpan={7} className="p-10 text-center"><Loader2 className="animate-spin text-blue-500 mx-auto" size={30}/></td></tr>
+                        ) : filteredFiles.length === 0 ? (
+                            <tr><td colSpan={7} className={`p-10 text-center font-medium ${textSub}`}>{isRTL ? 'لا توجد ملفات في هذا المجلد.' : 'No files found in this folder.'}</td></tr>
+                        ) : filteredFiles.map(file => (
+                            <tr key={file.id} className={`transition group ${activeFile?.id === file.id ? (isDark ? 'bg-blue-900/20' : 'bg-blue-50') : (isDark ? 'hover:bg-slate-800/30' : 'hover:bg-blue-50/30')}`}>
+                                <td className="p-4"><input type="checkbox" className="w-4 h-4 rounded border-slate-300"/></td>
+                                <td className="p-4">
+                                    <div className="flex items-center gap-3 cursor-pointer" onClick={() => { setActiveFile(file); setIsDetailsOpen(true); }}>
+                                        <div className={`p-2 rounded-lg border shadow-sm ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-100'}`}>{getFileIcon(file.type)}</div>
+                                        <div>
+                                            <div className={`font-bold text-sm transition ${textMain} ${isDark ? 'group-hover:text-blue-400' : 'group-hover:text-blue-600'}`}>{file.name}</div>
+                                            {file.confidentiality === 'Confidential' && <span className={`text-[10px] font-bold px-1.5 rounded flex items-center gap-1 w-fit mt-1 border ${isDark ? 'text-red-400 bg-red-900/20 border-red-800' : 'text-red-600 bg-red-50 border-red-100'}`}><Shield size={10}/> {isRTL ? 'سري' : 'Confidential'}</span>}
+                                        </div>
+                                    </div>
+                                </td>
+                                <td className="p-4">
+                                    <div className={`text-xs font-bold ${textMain}`}>{file.type}</div>
+                                    <div className={`text-[10px] font-mono ${textSub}`}>{file.size}</div>
+                                </td>
+                                <td className="p-4 text-xs">
+                                    <div className={`font-bold ${textMain}`}>{file.uploadedBy}</div>
+                                    <div className={textSub}>{file.uploadDate}</div>
+                                </td>
+                                <td className="p-4">
+                                    <span className={`text-xs px-2 py-1 rounded font-mono border ${isDark ? 'bg-slate-800 text-slate-300 border-slate-700' : 'bg-slate-100 text-slate-600 border-slate-200'}`}>{file.linkedEntity}</span>
+                                </td>
+                                <td className="p-4">{getStatusBadge(file.status)}</td>
+                                <td className={`p-4 ${isRTL ? 'text-left' : 'text-right'}`}>
+                                    <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <button onClick={() => handleDownload(file)} className={`p-2 rounded-lg transition shadow-sm border ${isDark ? 'bg-slate-800 border-slate-700 text-slate-400 hover:text-blue-400 hover:border-blue-500' : 'bg-white border-slate-200 text-slate-500 hover:text-blue-600 hover:border-blue-300'}`} title="Download">
+                                            <Download size={16}/>
+                                        </button>
+                                        <button onClick={() => { setActiveFile(file); setIsDetailsOpen(true); }} className={`p-2 rounded-lg transition shadow-sm border ${isDark ? 'bg-slate-800 border-slate-700 text-slate-400 hover:text-white hover:border-slate-500' : 'bg-white border-slate-200 text-slate-500 hover:text-slate-800 hover:border-slate-400'}`} title="Details">
+                                            <Eye size={16}/>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
         </div>
       </div>
 
       {/* --- 4. File Details Drawer --- */}
       {isDetailsOpen && activeFile && (
-        <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-            <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-right duration-300">
+        <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+            <div className={`w-full max-w-md rounded-[2rem] shadow-2xl flex flex-col overflow-hidden border ${isDark ? 'bg-slate-900 border-slate-700' : 'bg-white border-white'}`}>
                 
                 {/* Header */}
-                <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-                    <h3 className="font-bold text-lg text-slate-800">{lang === 'ar' ? 'تفاصيل الملف' : 'File Details'}</h3>
-                    <button onClick={() => setIsDetailsOpen(false)} className="p-2 hover:bg-slate-200 rounded-lg"><X size={20}/></button>
+                <div className={`p-5 border-b flex justify-between items-center ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-100'}`}>
+                    <h3 className={`font-bold text-lg ${textMain}`}>{isRTL ? 'تفاصيل الملف' : 'File Details'}</h3>
+                    <button onClick={() => setIsDetailsOpen(false)} className={`p-2 rounded-full transition ${isDark ? 'hover:bg-slate-700 text-slate-400' : 'hover:bg-slate-200 text-slate-500'}`}><X size={20}/></button>
                 </div>
 
                 {/* Content */}
-                <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
                     {/* Preview Placeholder */}
-                    <div className="bg-slate-100 rounded-xl h-48 flex flex-col items-center justify-center border-2 border-dashed border-slate-300">
+                    <div className={`rounded-2xl h-48 flex flex-col items-center justify-center border-2 border-dashed ${isDark ? 'bg-slate-800/50 border-slate-700' : 'bg-slate-50 border-slate-300'}`}>
                         {getFileIcon(activeFile.type)}
-                        <span className="text-xs font-bold text-slate-400 mt-2">{lang === 'ar' ? 'معاينة غير متوفرة' : 'No Preview Available'}</span>
-                        <button className="mt-2 text-blue-600 text-xs font-bold hover:underline">{lang === 'ar' ? 'فتح في عارض خارجي' : 'Open in Viewer'}</button>
+                        <span className={`text-xs font-bold mt-3 ${textSub}`}>{isRTL ? 'معاينة غير متوفرة' : 'No Preview Available'}</span>
+                        <a href={activeFile.file_url} target="_blank" rel="noreferrer" className="mt-2 text-blue-500 text-xs font-bold hover:underline">{isRTL ? 'فتح في علامة تبويب جديدة' : 'Open in new tab'}</a>
                     </div>
 
                     {/* Metadata */}
                     <div className="space-y-4">
-                        <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
-                            <h4 className="font-bold text-sm text-slate-800 mb-3">{activeFile.name}</h4>
-                            <div className="grid grid-cols-2 gap-y-3 gap-x-2 text-xs">
-                                <div className="text-slate-400">{lang === 'ar' ? 'النوع:' : 'Type:'} <span className="text-slate-700 font-bold">{activeFile.type}</span></div>
-                                <div className="text-slate-400">{lang === 'ar' ? 'الحجم:' : 'Size:'} <span className="text-slate-700 font-bold">{activeFile.size}</span></div>
-                                <div className="text-slate-400">{lang === 'ar' ? 'الإصدار:' : 'Version:'} <span className="text-slate-700 font-bold">{activeFile.version}</span></div>
-                                <div className="text-slate-400">{lang === 'ar' ? 'مرات التحميل:' : 'Downloads:'} <span className="text-slate-700 font-bold">{activeFile.downloads}</span></div>
+                        <div className={`p-4 rounded-xl border ${isDark ? 'bg-slate-800/50 border-slate-700' : 'bg-slate-50 border-slate-100'}`}>
+                            <h4 className={`font-bold text-sm mb-4 break-all ${textMain}`}>{activeFile.name}</h4>
+                            <div className="grid grid-cols-2 gap-y-4 gap-x-2 text-xs">
+                                <div className={textSub}>{isRTL ? 'النوع:' : 'Type:'} <span className={`font-bold ml-1 ${textMain}`}>{activeFile.type}</span></div>
+                                <div className={textSub}>{isRTL ? 'الحجم:' : 'Size:'} <span className={`font-bold ml-1 ${textMain}`}>{activeFile.size}</span></div>
+                                <div className={textSub}>{isRTL ? 'السرية:' : 'Sec:'} <span className={`font-bold ml-1 ${textMain}`}>{activeFile.confidentiality}</span></div>
+                                <div className={textSub}>{isRTL ? 'التحميلات:' : 'Downloads:'} <span className={`font-bold ml-1 ${textMain}`}>{activeFile.downloads}</span></div>
                             </div>
                         </div>
 
                         <div>
-                            <h5 className="text-xs font-bold text-slate-500 uppercase mb-2">{lang === 'ar' ? 'الارتباطات' : 'Links'}</h5>
+                            <h5 className={`text-xs font-bold uppercase mb-2 ${textSub}`}>{isRTL ? 'الارتباطات' : 'Links'}</h5>
                             <div className="flex gap-2">
-                                <span className="bg-blue-50 text-blue-700 px-2 py-1 rounded text-xs font-bold border border-blue-100">{activeFile.linkedEntity}</span>
-                                <span className="bg-purple-50 text-purple-700 px-2 py-1 rounded text-xs font-bold border border-purple-100">{activeFile.folderId}</span>
-                            </div>
-                        </div>
-
-                        <div>
-                            <h5 className="text-xs font-bold text-slate-500 uppercase mb-2">{lang === 'ar' ? 'سجل النشاط' : 'Audit Log'}</h5>
-                            <div className="space-y-2 pl-2 border-l-2 border-slate-100">
-                                <div className="text-xs text-slate-600 pl-2">
-                                    <span className="font-bold">System</span> checked for viruses <span className="text-slate-400">- 10:00 AM</span>
-                                </div>
-                                <div className="text-xs text-slate-600 pl-2">
-                                    <span className="font-bold">{activeFile.uploadedBy}</span> uploaded v1.0 <span className="text-slate-400">- {activeFile.uploadDate}</span>
-                                </div>
+                                <span className={`px-2 py-1 rounded text-xs font-bold border ${isDark ? 'bg-blue-900/20 text-blue-400 border-blue-800' : 'bg-blue-50 text-blue-700 border-blue-100'}`}>{activeFile.linkedEntity}</span>
+                                <span className={`px-2 py-1 rounded text-xs font-bold border ${isDark ? 'bg-purple-900/20 text-purple-400 border-purple-800' : 'bg-purple-50 text-purple-700 border-purple-100'}`}>{activeFile.folderId}</span>
                             </div>
                         </div>
                     </div>
                 </div>
 
                 {/* Footer Actions */}
-                <div className="p-5 border-t border-slate-100 bg-slate-50 flex flex-col gap-2">
-                    <button onClick={() => handleDownload(activeFile)} className="w-full py-3 bg-blue-600 text-white rounded-xl font-bold text-sm hover:bg-blue-700 shadow-lg flex items-center justify-center gap-2">
-                        <Download size={18}/> {lang === 'ar' ? 'تحميل الملف' : 'Download File'}
+                <div className={`p-5 border-t flex flex-col gap-3 ${isDark ? 'border-slate-800 bg-slate-800/30' : 'border-slate-100 bg-slate-50'}`}>
+                    <button onClick={() => handleDownload(activeFile)} className="w-full py-3 bg-blue-600 text-white rounded-xl font-bold text-sm hover:bg-blue-700 shadow-lg shadow-blue-500/20 flex items-center justify-center gap-2 transition active:scale-95">
+                        <Download size={18}/> {isRTL ? 'تحميل الملف' : 'Download File'}
                     </button>
-                    <div className="flex gap-2">
-                        <button onClick={handleShare} className="flex-1 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-xl font-bold text-sm hover:bg-slate-100 flex items-center justify-center gap-2">
-                            <Share2 size={16}/> {lang === 'ar' ? 'مشاركة' : 'Share'}
+                    <div className="flex gap-3">
+                        <button onClick={() => handleShare(activeFile.file_url)} className={`flex-1 py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition border ${isDark ? 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700' : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-100'}`}>
+                            <Share2 size={16}/> {isRTL ? 'مشاركة' : 'Share'}
                         </button>
-                        <button onClick={() => handleDelete(activeFile.id)} className="p-2.5 bg-red-50 border border-red-200 text-red-600 rounded-xl hover:bg-red-100">
+                        <button onClick={() => handleDelete(activeFile.id, activeFile.file_url)} className={`p-3 rounded-xl border transition ${isDark ? 'bg-red-900/10 border-red-900/50 text-red-500 hover:bg-red-900/30' : 'bg-red-50 border-red-200 text-red-600 hover:bg-red-100'}`}>
                             <Trash2 size={18}/>
                         </button>
                     </div>
@@ -379,29 +439,29 @@ export default function FilesPage() {
       {/* --- 5. Upload Modal --- */}
       {isUploadOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in zoom-in duration-200">
-            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden">
-                <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-                    <h3 className="font-bold text-lg text-slate-800">{lang === 'ar' ? 'رفع ملف جديد' : 'Upload New File'}</h3>
-                    <button onClick={() => setIsUploadOpen(false)} className="p-2 hover:bg-slate-200 rounded-lg"><X size={20}/></button>
+            <div className={`w-full max-w-lg rounded-[2rem] shadow-2xl overflow-hidden border ${isDark ? 'bg-slate-900 border-slate-700' : 'bg-white border-white'}`}>
+                <div className={`p-5 border-b flex justify-between items-center ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-100'}`}>
+                    <h3 className={`font-bold text-lg ${textMain}`}>{isRTL ? 'رفع مستند جديد' : 'Upload New File'}</h3>
+                    <button onClick={() => setIsUploadOpen(false)} className={`p-2 rounded-full transition ${isDark ? 'hover:bg-slate-700 text-slate-400' : 'hover:bg-slate-200 text-slate-500'}`}><X size={20}/></button>
                 </div>
                 
-                <div className="p-6 space-y-4">
+                <div className="p-6 space-y-5">
                     {/* Drag & Drop Area */}
                     <div 
                         onClick={() => fileInputRef.current?.click()}
-                        className="border-2 border-dashed border-slate-300 rounded-2xl p-8 text-center hover:bg-slate-50 hover:border-blue-400 transition cursor-pointer relative"
+                        className={`border-2 border-dashed rounded-2xl p-8 text-center transition cursor-pointer relative ${isDark ? 'border-slate-700 hover:bg-slate-800/50 hover:border-blue-500' : 'border-slate-300 hover:bg-slate-50 hover:border-blue-400'}`}
                     >
                         <input type="file" ref={fileInputRef} className="hidden" onChange={(e) => setUploadFile(e.target.files ? e.target.files[0] : null)} />
-                        <div className="flex flex-col items-center gap-2">
-                            <div className="w-12 h-12 bg-blue-50 rounded-full flex items-center justify-center text-blue-600 mb-2"><UploadCloud size={24}/></div>
+                        <div className="flex flex-col items-center gap-3">
+                            <div className={`w-14 h-14 rounded-full flex items-center justify-center mb-1 ${isDark ? 'bg-blue-900/20 text-blue-400' : 'bg-blue-50 text-blue-600'}`}><UploadCloud size={28}/></div>
                             {uploadFile ? (
-                                <div className="text-sm font-bold text-green-600 flex items-center gap-2">
-                                    <CheckCircle2 size={16}/> {uploadFile.name} ({(uploadFile.size/1024/1024).toFixed(2)} MB)
+                                <div className="text-sm font-bold text-emerald-500 flex items-center gap-2">
+                                    <CheckCircle2 size={18}/> {uploadFile.name}
                                 </div>
                             ) : (
                                 <>
-                                    <span className="font-bold text-slate-700">{lang === 'ar' ? 'اضغط أو اسحب الملف هنا' : 'Click or Drag file here'}</span>
-                                    <span className="text-xs text-slate-400">PDF, DWG, Images (Max 50MB)</span>
+                                    <span className={`font-bold ${textMain}`}>{isRTL ? 'اضغط لاختيار الملف' : 'Click to select file'}</span>
+                                    <span className={`text-xs ${textSub}`}>PDF, DWG, Images, Excel (Max 50MB)</span>
                                 </>
                             )}
                         </div>
@@ -410,55 +470,52 @@ export default function FilesPage() {
                     {/* Metadata Inputs */}
                     <div className="grid grid-cols-2 gap-4">
                         <div>
-                            <label className="text-xs font-bold text-slate-500 mb-1.5 block">{lang === 'ar' ? 'المجلد' : 'Folder'}</label>
+                            <label className={`text-xs font-bold mb-1.5 block ${textSub}`}>{isRTL ? 'التصنيف / المجلد' : 'Folder'}</label>
                             <select 
-                                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-500"
-                                value={uploadMeta.folder}
-                                onChange={(e) => setUploadMeta({...uploadMeta, folder: e.target.value})}
+                                className={`w-full rounded-xl px-4 py-3 text-sm font-bold outline-none border focus:ring-2 ${isDark ? 'bg-slate-800 border-slate-700 text-white focus:ring-blue-500/50' : 'bg-slate-50 border-slate-200 text-slate-900 focus:ring-blue-100'}`}
+                                value={uploadMeta.folder} onChange={(e) => setUploadMeta({...uploadMeta, folder: e.target.value})}
                             >
-                                <option value="root">Root</option>
+                                <option value="root">Root (العام)</option>
                                 {folders.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
                             </select>
                         </div>
                         <div>
-                            <label className="text-xs font-bold text-slate-500 mb-1.5 block">{lang === 'ar' ? 'السرية' : 'Confidentiality'}</label>
+                            <label className={`text-xs font-bold mb-1.5 block ${textSub}`}>{isRTL ? 'السرية' : 'Confidentiality'}</label>
                             <select 
-                                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-500"
-                                value={uploadMeta.confidentiality}
-                                onChange={(e) => setUploadMeta({...uploadMeta, confidentiality: e.target.value})}
+                                className={`w-full rounded-xl px-4 py-3 text-sm font-bold outline-none border focus:ring-2 ${isDark ? 'bg-slate-800 border-slate-700 text-white focus:ring-blue-500/50' : 'bg-slate-50 border-slate-200 text-slate-900 focus:ring-blue-100'}`}
+                                value={uploadMeta.confidentiality} onChange={(e) => setUploadMeta({...uploadMeta, confidentiality: e.target.value})}
                             >
-                                <option>Internal</option>
-                                <option>Confidential</option>
-                                <option>Public</option>
+                                <option value="Internal">Internal (داخلي)</option>
+                                <option value="Confidential">Confidential (سري)</option>
                             </select>
                         </div>
                     </div>
 
                     {/* Progress Bar */}
                     {uploadProgress > 0 && (
-                        <div className="space-y-1">
-                            <div className="flex justify-between text-xs font-bold text-slate-600">
-                                <span>Uploading...</span>
-                                <span>{uploadProgress}%</span>
+                        <div className="space-y-1.5">
+                            <div className={`flex justify-between text-xs font-bold ${textSub}`}>
+                                <span>{isRTL ? 'جاري الرفع للـ Cloud...' : 'Uploading...'}</span>
+                                <span className="text-blue-500">{uploadProgress}%</span>
                             </div>
-                            <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
-                                <div className="h-full bg-blue-600 rounded-full transition-all duration-200" style={{ width: `${uploadProgress}%` }}></div>
+                            <div className={`h-2 w-full rounded-full overflow-hidden ${isDark ? 'bg-slate-800' : 'bg-slate-100'}`}>
+                                <div className="h-full bg-blue-600 rounded-full transition-all duration-300" style={{ width: `${uploadProgress}%` }}></div>
                             </div>
                         </div>
                     )}
                 </div>
 
-                <div className="p-5 border-t border-slate-100 bg-slate-50 flex gap-3">
-                    <button onClick={() => setIsUploadOpen(false)} className="flex-1 py-2.5 bg-white border border-slate-300 text-slate-600 rounded-xl font-bold text-sm hover:bg-slate-100">
-                        {lang === 'ar' ? 'إلغاء' : 'Cancel'}
+                <div className={`p-5 border-t flex gap-3 ${isDark ? 'border-slate-800 bg-slate-800/30' : 'border-slate-100 bg-slate-50'}`}>
+                    <button onClick={() => setIsUploadOpen(false)} className={`flex-1 py-3 rounded-xl font-bold text-sm transition border ${isDark ? 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700' : 'bg-white border-slate-300 text-slate-600 hover:bg-slate-100'}`}>
+                        {isRTL ? 'إلغاء' : 'Cancel'}
                     </button>
                     <button 
                         onClick={handleUploadFile} 
                         disabled={!uploadFile || uploadProgress > 0}
-                        className="flex-1 py-2.5 bg-slate-900 text-white rounded-xl font-bold text-sm hover:bg-slate-800 shadow-lg flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="flex-[2] py-3 bg-blue-600 text-white rounded-xl font-bold text-sm hover:bg-blue-700 shadow-lg shadow-blue-500/20 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition active:scale-95"
                     >
-                        {uploadProgress > 0 ? <RefreshCw size={16} className="animate-spin"/> : <Save size={16}/>}
-                        {lang === 'ar' ? 'بدء الرفع' : 'Start Upload'}
+                        {uploadProgress > 0 ? <Loader2 size={18} className="animate-spin"/> : <Save size={18}/>}
+                        {isRTL ? 'رفع وحفظ المستند' : 'Upload & Save'}
                     </button>
                 </div>
             </div>
@@ -470,31 +527,24 @@ export default function FilesPage() {
 }
 
 // --- Icons & Helpers ---
-function StatCard({ label, value, color, icon: Icon }: any) {
+function StatCard({ label, value, color, icon: Icon, isDark }: any) {
     const colors: any = {
-        blue: 'bg-blue-50 text-blue-600',
-        green: 'bg-emerald-50 text-emerald-600',
-        red: 'bg-red-50 text-red-600',
-        amber: 'bg-amber-50 text-amber-600',
+        blue: isDark ? 'bg-blue-900/20 text-blue-400 border-blue-800' : 'bg-blue-50 text-blue-600 border-blue-100',
+        emerald: isDark ? 'bg-emerald-900/20 text-emerald-400 border-emerald-800' : 'bg-emerald-50 text-emerald-600 border-emerald-100',
+        amber: isDark ? 'bg-amber-900/20 text-amber-400 border-amber-800' : 'bg-amber-50 text-amber-600 border-amber-100',
+        red: isDark ? 'bg-red-900/20 text-red-400 border-red-800' : 'bg-red-50 text-red-600 border-red-100',
     };
     return (
-        <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex items-center justify-between">
-            <div>
-                <div className="text-2xl font-black text-slate-800">{value}</div>
-                <div className="text-xs font-bold text-slate-400">{label}</div>
+        <div className={`p-5 rounded-2xl border flex flex-col justify-between transition-all ${isDark ? 'bg-slate-900/60 border-slate-800 hover:bg-slate-800' : 'bg-white border-slate-200 hover:shadow-sm'}`}>
+            <div className="flex justify-between items-start mb-3">
+                <div className={`text-xs font-bold ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{label}</div>
+                <div className={`p-2 rounded-xl border ${colors[color]}`}><Icon size={18} /></div>
             </div>
-            <div className={`p-3 rounded-xl ${colors[color]}`}>
-                <Icon size={20} />
-            </div>
+            <div className={`text-3xl font-black ${isDark ? 'text-white' : 'text-slate-900'}`}>{value}</div>
         </div>
     );
 }
 
-// Custom Icons
 function DraftingCompassIcon({ size, className }: { size: number, className?: string }) {
     return <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="5" r="2"/><line x1="12" x2="19" y1="5" y2="21"/><line x1="12" x2="5" y1="5" y2="21"/><circle cx="12" cy="12" r="2"/></svg>;
-}
-
-function DatabaseIcon({ size, className }: { size: number, className?: string }) {
-    return <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>;
 }
