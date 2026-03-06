@@ -12,7 +12,10 @@ import {
   Sun, Moon, Globe, Briefcase, Settings, 
   BookOpen, ReceiptText, ShieldCheck, Loader2, List,
   HardDrive, LayoutGrid, ChevronDown, CheckCircle2,
-  LifeBuoy, Send, X, Building2, FileSignature // 👈 تمت إضافة FileSignature للأيقونة الجديدة
+  LifeBuoy, Send, X, Building2, FileSignature, 
+  ShoppingCart, PackageOpen, Truck, Landmark, CreditCard, 
+  FilePlus, FileSpreadsheet, WalletCards,
+  ArrowRight
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -51,7 +54,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [user, setUser] = useState<UserProfile | null>(null);
   const [loadingUser, setLoadingUser] = useState(true);
 
-  // الدوال المفقودة
   const toggleTheme = () => setIsDark(!isDark);
   const toggleLang = () => setLang(prev => prev === 'ar' ? 'en' : 'ar');
   const isRTL = lang === 'ar';
@@ -141,18 +143,20 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             subcontractors: 'المقاولين الرئيسيين',
             ops: 'العمليات', workflow: 'سير العمل', requests: 'الطلبات', quality: 'الجودة',
             comm: 'التواصل والملفات', meet: 'الاجتماعات', vault: 'خزنة الملفات', notif: 'الإشعارات',
-            perf: 'التقارير والأداء', prod: 'الإنتاجية', kpi: 'مؤشرات الأداء', boards: 'اللوحات', hr_actions: 'سجل القرارات والإجراءات', // 👈 تمت الإضافة هنا
-            fin: 'المالية', fin_gl: 'القيود', fin_invoices: 'الفوترة', fin_expenses: 'المصروفات', fin_payroll: 'الرواتب',
-            settings: 'الإعدادات', appManager: 'إدارة التطبيقات'
+            perf: 'التقارير والأداء', prod: 'الإنتاجية', kpi: 'مؤشرات الأداء', boards: 'اللوحات', hr_actions: 'سجل القرارات والإجراءات',
+            settings: 'الإعدادات', appManager: 'إدارة التطبيقات',
+            // 🚀 القاموس المالي الذكي (ERP Finance) 🚀
+            fin_sales: 'المبيعات', fin_sales_new: 'إنشاء فاتورة مبيعات', fin_sales_list: 'عرض فواتير المبيعات', fin_quotes_new: 'إنشاء عرض سعر', fin_quotes_list: 'مراجعة عروض الأسعار',
+            fin_inventory: 'المخزون', fin_inv_mgr: 'إدارة المخزون', fin_inv_issue: 'طلب صرف إذن مخزني',
+            fin_clients: 'العملاء', fin_client_bal: 'أرصدة العملاء', fin_client_list: 'قائمة العملاء',
+            fin_purchases: 'المشتريات', fin_purch_new: 'إنشاء فاتورة مشتريات', fin_purch_list: 'عرض فواتير المشتريات',
+            fin_suppliers: 'الموردين', fin_supp_bal: 'أرصدة الموردين', fin_supp_list: 'قائمة الموردين',
+            fin_transactions: 'المعاملات المالية', fin_treasury: 'الخزينة والصندوق', fin_je_list: 'شجرة الحسابات', fin_je_new: 'إنشاء قيد يومية جديد', fin_voucher_out: 'سند صرف', fin_voucher_in: 'سند قبض', fin_payroll: 'مسيرات الرواتب', fin_clearances: 'المستخلصات المالية', fin_contracts: 'العقود الحالية',
+            fin_expenses: 'المصروفات', fin_exp_new: 'إضافة مصروفات جديدة', fin_exp_list: 'عرض المصروفات', fin_exp_req: 'طلبات الصرف الجديدة'
         },
         apps: { all: 'الكل', ops: 'العمليات والمشاريع', fin: 'المالية والحسابات', comm: 'التواصل والمستندات', sys: 'النظام والإعدادات' },
-        help: {
-            title: 'مركز المساعدة', subject: 'العنوان', message: 'الوصف',
-            urgency: 'الأهمية', low: 'عادية', normal: 'متوسطة', high: 'عاجلة', cancel: 'إلغاء', submit: 'إرسال'
-        },
-        notifications: {
-          title: 'الإشعارات', empty: 'لا توجد إشعارات', viewAll: 'عرض الكل'
-        }
+        help: { title: 'مركز المساعدة', subject: 'العنوان', message: 'الوصف', urgency: 'الأهمية', low: 'عادية', normal: 'متوسطة', high: 'عاجلة', cancel: 'إلغاء', submit: 'إرسال' },
+        notifications: { title: 'الإشعارات', empty: 'لا توجد إشعارات', viewAll: 'عرض الكل' }
     },
     en: { 
         logout: 'Logout', headerTitle: 'GMS ERP System', allApps: 'All Apps',
@@ -162,18 +166,20 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             subcontractors: 'Subcontractors',
             ops: 'Operations', workflow: 'Workflow', requests: 'Requests', quality: 'Quality',
             comm: 'Comms & Files', meet: 'Meetings', vault: 'Data Vault', notif: 'Notifications',
-            perf: 'Reports', prod: 'Productivity', kpi: 'KPIs', boards: 'Dashboards', hr_actions: 'HR Actions Log', // 👈 تمت الإضافة هنا
-            fin: 'Finance', fin_gl: 'GL', fin_invoices: 'Invoicing', fin_expenses: 'Expenses', fin_payroll: 'Payroll',
-            settings: 'Settings', appManager: 'App Manager'
+            perf: 'Reports', prod: 'Productivity', kpi: 'KPIs', boards: 'Dashboards', hr_actions: 'HR Actions Log',
+            settings: 'Settings', appManager: 'App Manager',
+            // 🚀 ERP Finance Dictionary 🚀
+            fin_sales: 'Sales', fin_sales_new: 'New Sales Invoice', fin_sales_list: 'Sales Invoices', fin_quotes_new: 'New Quotation', fin_quotes_list: 'Review Quotations',
+            fin_inventory: 'Inventory', fin_inv_mgr: 'Inventory Management', fin_inv_issue: 'Stock Issue Request',
+            fin_clients: 'Clients', fin_client_bal: 'Client Balances', fin_client_list: 'Clients List',
+            fin_purchases: 'Purchases', fin_purch_new: 'New Purchase Invoice', fin_purch_list: 'Purchase Invoices',
+            fin_suppliers: 'Suppliers', fin_supp_bal: 'Supplier Balances', fin_supp_list: 'Suppliers List',
+            fin_transactions: 'Financial Transactions', fin_treasury: 'Treasury & Cash', fin_je_list: 'Journal Entries', fin_je_new: 'New Journal Entry', fin_voucher_out: 'Payment Voucher', fin_voucher_in: 'Receipt Voucher', fin_payroll: 'Payroll', fin_clearances: 'Financial Clearances', fin_contracts: 'Current Contracts',
+            fin_expenses: 'Expenses', fin_exp_new: 'Add New Expense', fin_exp_list: 'View Expenses', fin_exp_req: 'New Expense Requests'
         },
         apps: { all: 'All Apps', ops: 'Operations & Projects', fin: 'Finance', comm: 'Comms & DMS', sys: 'System & Settings' },
-        help: {
-            title: 'Support', subject: 'Subject', message: 'Message',
-            urgency: 'Urgency', low: 'Low', normal: 'Normal', high: 'High', cancel: 'Cancel', submit: 'Submit'
-        },
-        notifications: {
-          title: 'Notifications', empty: 'No notifications', viewAll: 'View All'
-        }
+        help: { title: 'Support', subject: 'Subject', message: 'Message', urgency: 'Urgency', low: 'Low', normal: 'Normal', high: 'High', cancel: 'Cancel', submit: 'Submit' },
+        notifications: { title: 'Notifications', empty: 'No notifications', viewAll: 'View All' }
     }
   };
   const currentT = t[lang];
@@ -181,6 +187,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const navigation = useMemo(() => {
     if (!user) return [];
     const userRole = user.role;
+    const finRoles = ['super_admin', 'admin', 'accountant'];
 
     const fullNavigation = [
       {
@@ -225,17 +232,66 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           { label: currentT.menu.prod, href: '/dashboard/reports/productivity', icon: <TrendingUp size={18} /> },
           { label: currentT.menu.kpi, href: '/dashboard/reports/kpi', icon: <Target size={18} /> },
           { label: currentT.menu.boards, href: '/dashboard/reports/dashboards', icon: <LayoutDashboard size={18} /> },
-          // 🚀 تمت إضافة خيار سجل القرارات الإدارية هنا 🚀
           { label: currentT.menu.hr_actions, href: '/dashboard/reports/hr-actions', icon: <FileSignature size={18} /> },
         ]
       },
+      // 🚀 القائمة المالية الذكية (ERP Level) 🚀
       {
-        title: currentT.menu.fin, pluginKey: 'finance', appKey: 'fin', icon: <DollarSign size={20} />, allowedRoles: ['super_admin', 'admin', 'accountant'],
+        title: currentT.menu.fin_sales, pluginKey: 'finance', appKey: 'fin', icon: <ShoppingCart size={20} />, allowedRoles: finRoles,
         items: [
-          { label: currentT.menu.fin_gl, href: '/dashboard/finance/general-ledger', icon: <BookOpen size={18} /> },
-          { label: currentT.menu.fin_invoices, href: '/dashboard/finance/e-invoicing', icon: <ReceiptText size={18} /> },
-          { label: currentT.menu.fin_expenses, href: '/dashboard/finance/expenses', icon: <Receipt size={18} /> },
-          { label: currentT.menu.fin_payroll, href: '/dashboard/finance/payroll', icon: <Banknote size={18} /> },
+          { label: currentT.menu.fin_sales_new, href: '/dashboard/finance/sales/new', icon: <FilePlus size={18} /> },
+          { label: currentT.menu.fin_sales_list, href: '/dashboard/finance/sales/invoices', icon: <ReceiptText size={18} /> },
+          { label: currentT.menu.fin_quotes_new, href: '/dashboard/finance/sales/quotes/new', icon: <FileSpreadsheet size={18} /> },
+          { label: currentT.menu.fin_quotes_list, href: '/dashboard/finance/sales/quotes', icon: <ListChecks size={18} /> },
+        ]
+      },
+      {
+        title: currentT.menu.fin_inventory, pluginKey: 'finance', appKey: 'fin', icon: <PackageOpen size={20} />, allowedRoles: finRoles,
+        items: [
+          { label: currentT.menu.fin_inv_mgr, href: '/dashboard/finance/inventory/manage', icon: <Box size={18} /> },
+          { label: currentT.menu.fin_inv_issue, href: '/dashboard/finance/inventory/issue', icon: <Share2 size={18} /> },
+        ]
+      },
+      {
+        title: currentT.menu.fin_clients, pluginKey: 'finance', appKey: 'fin', icon: <Users size={20} />, allowedRoles: finRoles,
+        items: [
+          { label: currentT.menu.fin_client_bal, href: '/dashboard/finance/clients/balances', icon: <WalletCards size={18} /> },
+          { label: currentT.menu.fin_client_list, href: '/dashboard/finance/clients/list', icon: <List size={18} /> },
+        ]
+      },
+      {
+        title: currentT.menu.fin_purchases, pluginKey: 'finance', appKey: 'fin', icon: <Landmark size={20} />, allowedRoles: finRoles,
+        items: [
+          { label: currentT.menu.fin_purch_new, href: '/dashboard/finance/purchases/new', icon: <FilePlus size={18} /> },
+          { label: currentT.menu.fin_purch_list, href: '/dashboard/finance/purchases/invoices', icon: <ReceiptText size={18} /> },
+        ]
+      },
+      {
+        title: currentT.menu.fin_suppliers, pluginKey: 'finance', appKey: 'fin', icon: <Truck size={20} />, allowedRoles: finRoles,
+        items: [
+          { label: currentT.menu.fin_supp_bal, href: '/dashboard/finance/suppliers/balances', icon: <WalletCards size={18} /> },
+          { label: currentT.menu.fin_supp_list, href: '/dashboard/finance/suppliers/list', icon: <List size={18} /> },
+        ]
+      },
+      {
+        title: currentT.menu.fin_transactions, pluginKey: 'finance', appKey: 'fin', icon: <Banknote size={20} />, allowedRoles: finRoles,
+        items: [
+          { label: currentT.menu.fin_treasury, href: '/dashboard/finance/transactions/treasury', icon: <Landmark size={18} /> },
+          { label: currentT.menu.fin_je_list, href: '/dashboard/finance/general-ledger', icon: <BookOpen size={18} /> },
+          { label: currentT.menu.fin_je_new, href: '/dashboard/finance/transactions/journal/new', icon: <PlusCircle size={18} /> },
+          { label: currentT.menu.fin_voucher_out, href: '/dashboard/finance/transactions/payment-voucher', icon: <ArrowRight size={18} /> },
+          { label: currentT.menu.fin_voucher_in, href: '/dashboard/finance/transactions/receipt-voucher', icon: <ChevronLeft size={18} /> },
+          { label: currentT.menu.fin_payroll, href: '/dashboard/finance/payroll', icon: <Users size={18} /> },
+          { label: currentT.menu.fin_clearances, href: '/dashboard/finance/clearances', icon: <CheckSquare size={18} /> },
+          { label: currentT.menu.fin_contracts, href: '/dashboard/finance/contracts', icon: <Briefcase size={18} /> },
+        ]
+      },
+      {
+        title: currentT.menu.fin_expenses, pluginKey: 'finance', appKey: 'fin', icon: <CreditCard size={20} />, allowedRoles: finRoles,
+        items: [
+          { label: currentT.menu.fin_exp_new, href: '/dashboard/finance/expenses/new', icon: <PlusCircle size={18} /> },
+          { label: currentT.menu.fin_exp_list, href: '/dashboard/finance/expenses/list', icon: <Receipt size={18} /> },
+          { label: currentT.menu.fin_exp_req, href: '/dashboard/finance/expenses/requests', icon: <Inbox size={18} /> },
         ]
       },
       {

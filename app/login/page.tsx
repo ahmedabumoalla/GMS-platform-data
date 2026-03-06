@@ -176,7 +176,7 @@ export default function LoginPage() {
           
           <div className="relative z-10 h-full flex flex-col justify-center items-center text-center">
             <div className="mb-8 p-4 bg-white/5 rounded-3xl backdrop-blur-sm border border-white/10 shadow-2xl">
-                <img src="/logo.png" alt="GMS Logo" className="w-32 h-auto object-contain drop-shadow-md" />
+                <img src="/logo1.png" alt="GMS Logo" className="w-32 h-auto object-contain drop-shadow-md" />
             </div>
 
             <h2 className="text-3xl font-black mb-4 leading-tight">

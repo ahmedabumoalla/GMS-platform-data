@@ -399,7 +399,7 @@ export default function HRActionsLogPage() {
                                     
                                     {/* Watermark Logo */}
                                     <div className="absolute inset-0 flex items-center justify-center opacity-[0.04] pointer-events-none z-0">
-                                        <img src="/logo.png" alt="GMS Watermark" className="w-3/4 max-w-[500px] object-contain" />
+                                        <img src="/logo1.png" alt="GMS Watermark" className="w-3/4 max-w-[500px] object-contain" />
                                     </div>
 
                                     {/* A4 Header */}
@@ -411,7 +411,7 @@ export default function HRActionsLogPage() {
 
                                         <div className="flex flex-col items-end gap-2">
                                             <div className="w-32 h-24 flex items-center justify-center overflow-hidden">
-                                                <img src="/logo.png" alt="GMS Logo" className="w-full h-full object-contain mix-blend-multiply" />
+                                                <img src="/logo1.png" alt="GMS Logo" className="w-full h-full object-contain mix-blend-multiply" />
                                             </div>
                                             <div className="text-center mt-2">
                                                 <h1 className="font-black text-lg tracking-tight text-slate-900">{text.a4Header}</h1>

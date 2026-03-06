@@ -322,7 +322,7 @@ export default function EnterpriseTimelinePage() {
             </head>
             <body>
               <div class="page-container">
-                <img src="/logo.png" class="watermark" alt="GMS Logo" onerror="this.style.display='none'" />
+                <img src="/logo1.png" class="watermark" alt="GMS Logo" onerror="this.style.display='none'" />
                 
                 <div class="header">
                   <div>

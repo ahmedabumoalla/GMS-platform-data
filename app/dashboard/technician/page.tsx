@@ -10,10 +10,9 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import imageCompression from 'browser-image-compression';
-import { useDashboard } from '../layout'; 
 
 type RequestType = 'work_update' | 'material' | 'custody' | 'expense' | 'manpower' | 'hr_request';
-type Language = 'ar' | 'en';
+type Language = 'ar' | 'en' | 'ur' | 'hi' | 'bn' | 'ne';
 
 interface AssignedTask {
   assignment_id: string; 
@@ -28,9 +27,13 @@ interface AssignedTask {
 
 export default function TechnicianDashboard() {
   const router = useRouter();
-  const { lang, user, isDark, toggleTheme, toggleLang } = useDashboard();
-  const isRTL = lang === 'ar';
+  const [isDark, setIsDark] = useState(false);
+  const [lang, setLang] = useState<Language>('ar');
+  const [isLangMenuOpen, setIsLangMenuOpen] = useState(false);
 
+  const isRTL = lang === 'ar' || lang === 'ur';
+
+  // --- 🚀 القاموس الشامل (6 لغات) ---
   const t = {
     ar: { 
         welcome: 'مرحباً بك', role: 'فني ميداني', checkIn: 'تسجيل الدخول', checkOut: 'تسجيل الخروج', statusOn: 'متواجد في الموقع', statusOff: 'غير مسجل الدخول', wallet: 'رصيد العهدة',
@@ -45,27 +48,55 @@ export default function TechnicianDashboard() {
         actions: { title: 'Task Actions', work: 'Work Update (Photos)', mat: 'Request Materials', cus: 'Request Custody', exp: 'Expense Claim', manpower: 'Request Manpower' }, 
         forms: { send: 'Submit to Manager', cancel: 'Cancel', notes: 'Notes & details...', amount: 'Amount', qty: 'Quantity', before: 'Before Photo', after: 'After Photo' },
         hr: 'HR Requests (Leaves, Letters)'
+    },
+    ur: { 
+        welcome: 'خوش آمدید', role: 'فیلڈ ٹیکنیشن', checkIn: 'چیک ان کریں', checkOut: 'چیک آؤٹ کریں', statusOn: 'سائٹ پر', statusOff: 'آف لائن', wallet: 'والیٹ بیلنس',
+        tasks: { active: 'فعال کام', pending: 'زیر التوا کام', empty: 'اس وقت کوئی کام تفویض نہیں کیا گیا۔', accept: 'قبول کریں', reject: 'مسترد کریں', complete: 'مکمل کریں' }, 
+        actions: { title: 'ٹاسک ایکشنز', work: 'کام کی تازہ کاری (تصاویر)', mat: 'مواد کی درخواست کریں', cus: 'حراست کی درخواست کریں', exp: 'اخراجات کا دعویٰ', manpower: 'افرادی قوت کی درخواست کریں' }, 
+        forms: { send: 'مینیجر کو بھیجیں', cancel: 'منسوخ کریں', notes: 'تفصیلات لکھیں...', amount: 'رقم', qty: 'مقدار', before: 'کام سے پہلے کی تصویر', after: 'کام کے بعد کی تصویر' },
+        hr: 'ایچ آر کی درخواستیں (چھٹیاں، خطوط)'
+    },
+    hi: { 
+        welcome: 'स्वागत है', role: 'फील्ड तकनीशियन', checkIn: 'चेक इन करें', checkOut: 'चेक आउट करें', statusOn: 'साइट पर', statusOff: 'ऑफ़लाइन', wallet: 'बटुआ शेष',
+        tasks: { active: 'सक्रिय कार्य', pending: 'लंबित कार्य', empty: 'वर्तमान में कोई कार्य नहीं है।', accept: 'स्वीकार करें', reject: 'अस्वीकार करें', complete: 'पूर्ण करें' }, 
+        actions: { title: 'कार्य क्रियाएं', work: 'कार्य अद्यतन (तस्वीरें)', mat: 'सामग्री का अनुरोध करें', cus: 'हिरासत का अनुरोध करें', exp: 'व्यय का दावा', manpower: 'जनशक्ति का अनुरोध करें' }, 
+        forms: { send: 'प्रबंधक को भेजें', cancel: 'रद्द करें', notes: 'विवरण...', amount: 'राशि', qty: 'मात्रा', before: 'कार्य से पहले की तस्वीर', after: 'कार्य के बाद की तस्वीर' },
+        hr: 'मानव संसाधन अनुरोध (पत्तियां, पत्र)'
+    },
+    bn: { 
+        welcome: 'স্বাগতম', role: 'মাঠ পর্যায়ের প্রযুক্তিবিদ', checkIn: 'চেক ইন করুন', checkOut: 'চেক আউট করুন', statusOn: 'সাইটে', statusOff: 'অফলাইন', wallet: 'মানিব্যাগ ব্যালেন্স',
+        tasks: { active: 'সক্রিয় কাজ', pending: 'অপেক্ষমান কাজ', empty: 'বর্তমানে কোন কাজ নেই।', accept: 'গ্রহণ করুন', reject: 'প্রত্যাখ্যান করুন', complete: 'সম্পূর্ণ করুন' }, 
+        actions: { title: 'কাজ কর্ম', work: 'কাজের আপডেট (ছবি)', mat: 'উপাদান অনুরোধ করুন', cus: 'হেফাজতের অনুরোধ করুন', exp: 'ব্যয় দাবি', manpower: 'জনশক্তি অনুরোধ করুন' }, 
+        forms: { send: 'ম্যানেজারের কাছে পাঠান', cancel: 'বাতিল করুন', notes: 'বিস্তারিত...', amount: 'পরিমাণ', qty: 'পরিমাণ', before: 'কাজের আগের ছবি', after: 'কাজের পরের ছবি' },
+        hr: 'এইচআর অনুরোধ (ছুটি, চিঠি)'
+    },
+    ne: { 
+        welcome: 'स्वागत छ', role: 'फिल्ड टेक्निसियन', checkIn: 'चेक इन गर्नुहोस्', checkOut: 'चेक आउट गर्नुहोस्', statusOn: 'साइटमा', statusOff: 'अफलाइन', wallet: 'वालेट ब्यालेन्स',
+        tasks: { active: 'सक्रिय कार्यहरू', pending: 'बाँकी कार्यहरू', empty: 'हाल कुनै कार्य तोकिएको छैन।', accept: 'स्वीकार गर्नुहोस्', reject: 'अस्वीकार गर्नुहोस्', complete: 'पूरा गर्नुहोस्' }, 
+        actions: { title: 'कार्य कार्यहरू', work: 'कार्य अपडेट (फोटोहरू)', mat: 'सामाग्री अनुरोध गर्नुहोस्', cus: 'हिरासत अनुरोध गर्नुहोस्', exp: 'खर्च दावी', manpower: 'जनशक्ति अनुरोध गर्नुहोस्' }, 
+        forms: { send: 'प्रबन्धकलाई पठाउनुहोस्', cancel: 'रद्द गर्नुहोस्', notes: 'विवरणहरू...', amount: 'रकम', qty: 'मात्रा', before: 'काम अघिको फोटो', after: 'काम पछिको फोटो' },
+        hr: 'HR अनुरोधहरू (पातहरू, पत्रहरू)'
     }
   };
-  const c = t[lang as Language] || t.en;
+  const c = t[lang];
 
   // --- States ---
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
   
+  const [userProfile, setUserProfile] = useState<any>(null);
   const [userName, setUserName] = useState<string>('');
   const [walletBalance, setWalletBalance] = useState<number>(0.00);
   const [attendance, setAttendance] = useState<{ id: string | null, isCheckedIn: boolean, time: string | null }>({ id: null, isCheckedIn: false, time: null });
   
   const [myTasks, setMyTasks] = useState<AssignedTask[]>([]);
   
-  // 🚀 حالة النافذة الذكية
+  // Action Modal States
   const [selectedTask, setSelectedTask] = useState<AssignedTask | null>(null);
   const [actionStep, setActionStep] = useState<'menu' | RequestType>('menu');
-  const [isHrModalOpen, setIsHrModalOpen] = useState(false);
   
-  // 🚀 حالات النماذج
+  // Forms States
   const [formData, setFormData] = useState({ notes: '', amount: '', qty: '', role: '' });
   const [photosBefore, setPhotosBefore] = useState<File[]>([]);
   const [photosAfter, setPhotosAfter] = useState<File[]>([]);
@@ -79,20 +110,21 @@ export default function TechnicianDashboard() {
 
   useEffect(() => {
     const fetchTechData = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-      setUserName(user.full_name || '');
+      setUserProfile(user);
 
-      // Wallet
+      const { data: profileData } = await supabase.from('profiles').select('full_name').eq('id', user.id).single();
+      if (profileData && profileData.full_name) setUserName(profileData.full_name);
+
       const { data: walletData } = await supabase.from('user_wallets').select('balance').eq('user_id', user.id).single();
       if (walletData) setWalletBalance(walletData.balance);
 
-      // Attendance
       const { data: attendData } = await supabase.from('attendance').select('id, check_in_time').eq('user_id', user.id).is('check_out_time', null).single();
       if (attendData) {
         setAttendance({ id: attendData.id, isCheckedIn: true, time: new Date(attendData.check_in_time).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) });
       }
 
-      // Tasks
       const { data: assignments } = await supabase
         .from('task_assignments')
         .select(`id, status, projects (id, title, category, location_name, manager_name, task_description)`)
@@ -108,17 +140,17 @@ export default function TechnicianDashboard() {
       }
     };
     fetchTechData();
-  }, [user]);
+  }, []);
 
   // --- Actions ---
   const handleAttendance = async () => {
     setLoading(true);
     try {
-      if (!user) throw new Error('User not found');
+      if (!userProfile) throw new Error('User not found');
       navigator.geolocation.getCurrentPosition(async (pos) => {
         if (!attendance.isCheckedIn) {
           const { data, error } = await supabase.from('attendance').insert({
-            user_id: user.id, location_lat: pos.coords.latitude, location_long: pos.coords.longitude, status: 'on_site'
+            user_id: userProfile.id, location_lat: pos.coords.latitude, location_long: pos.coords.longitude, status: 'on_site'
           }).select().single();
           if (error) throw error;
           setAttendance({ id: data.id, isCheckedIn: true, time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) });
@@ -139,7 +171,7 @@ export default function TechnicianDashboard() {
           const { error } = await supabase.from('task_assignments').update({ status: newStatus }).eq('id', assignmentId);
           if (error) throw error;
           setMyTasks(prev => prev.map(t => t.assignment_id === assignmentId ? { ...t, tech_status: newStatus } : t));
-          alert('تم التحديث بنجاح');
+          alert('Successfully Updated');
       } catch (error: any) { alert(error.message); } finally { setLoading(false); }
   };
 
@@ -153,8 +185,8 @@ export default function TechnicianDashboard() {
   };
 
   const uploadToSupabase = async (file: File, folder: string) => {
-      if(!user) return null;
-      const fileName = `${user.id}/${folder}/${Date.now()}.jpg`;
+      if(!userProfile) return null;
+      const fileName = `${userProfile.id}/${folder}/${Date.now()}.jpg`;
       const { error } = await supabase.storage.from('tech-media').upload(fileName, file);
       if (error) throw error;
       const { data } = supabase.storage.from('tech-media').getPublicUrl(fileName);
@@ -163,34 +195,31 @@ export default function TechnicianDashboard() {
 
   const submitActionRequest = async (e: React.FormEvent) => {
       e.preventDefault();
-      if (!user || !selectedTask) return;
+      if (!userProfile || !selectedTask) return;
       setSubmitting(true);
 
       try {
-          // 1. إذا كان التحديث "تحديث عمل (صور)"
           if (actionStep === 'work_update') {
               if (photosBefore.length === 0 && photosAfter.length === 0) throw new Error('يجب إرفاق صورة واحدة على الأقل.');
               const beforeUrls = await Promise.all(photosBefore.map(f => uploadToSupabase(f, 'tasks/before')));
               const afterUrls = await Promise.all(photosAfter.map(f => uploadToSupabase(f, 'tasks/after')));
               
               await supabase.from('task_updates').insert({
-                  user_id: user.id, project_id: selectedTask.project_id, update_type: 'work_update', task_status: 'in_progress', notes: formData.notes, photos_before: beforeUrls, photos_after: afterUrls
+                  user_id: userProfile.id, project_id: selectedTask.project_id, update_type: 'work_update', task_status: 'in_progress', notes: formData.notes, photos_before: beforeUrls, photos_after: afterUrls
               });
           } 
-          // 2. باقي الطلبات (مواد، عهدة، الخ)
           else {
               let attUrl = attachment ? await uploadToSupabase(attachment, 'requests') : null;
               await supabase.from('technician_requests').insert({
-                  user_id: user.id, project_id: selectedTask.project_id, request_type: actionStep, description: formData.notes, amount: formData.amount ? parseFloat(formData.amount) : null, attachment_url: attUrl
+                  user_id: userProfile.id, project_id: selectedTask.project_id, request_type: actionStep, description: formData.notes, amount: formData.amount ? parseFloat(formData.amount) : null, attachment_url: attUrl
               });
 
-              // دمجها في جدول task_updates ليراها المدير في نفس الشاشة
               await supabase.from('task_updates').insert({
-                  user_id: user.id, project_id: selectedTask.project_id, update_type: actionStep, notes: formData.notes, amount: formData.amount ? parseFloat(formData.amount) : null, material_qty: formData.qty || null
+                  user_id: userProfile.id, project_id: selectedTask.project_id, update_type: actionStep, notes: formData.notes, amount: formData.amount ? parseFloat(formData.amount) : null, material_qty: formData.qty || null
               });
           }
 
-          alert('تم إرسال التحديث للمدير بنجاح.');
+          alert('Success');
           closeActionModal();
       } catch (error: any) { alert(error.message); } finally { setSubmitting(false); }
   };
@@ -208,10 +237,38 @@ export default function TechnicianDashboard() {
   const bgMain = isDark ? "bg-slate-950" : "bg-slate-100";
   const cardBg = isDark ? "bg-slate-900 border-slate-800" : "bg-white border-slate-200";
   const textMain = isDark ? "text-white" : "text-slate-900";
+  const glassInput = isDark ? "bg-slate-800 border-slate-700 text-white" : "bg-slate-50 border-slate-200 text-slate-900";
+
+  const languages = [
+      { code: 'ar', label: 'العربية' },
+      { code: 'en', label: 'English' },
+      { code: 'ur', label: 'اردو' },
+      { code: 'hi', label: 'हिंदी' },
+      { code: 'bn', label: 'বাংলা' },
+      { code: 'ne', label: 'नेपाली' }
+  ];
 
   return (
     <div className={`min-h-screen font-sans pb-10 ${bgMain} ${isRTL ? 'dir-rtl' : 'dir-ltr'}`} dir={isRTL ? 'rtl' : 'ltr'}>
       
+      {/* 🚀 Floating Language Switcher */}
+      <div className={`fixed bottom-6 ${isRTL ? 'left-6' : 'right-6'} z-50`}>
+          <button onClick={() => setIsLangMenuOpen(!isLangMenuOpen)} className="w-14 h-14 bg-blue-600 text-white rounded-full shadow-2xl flex items-center justify-center hover:bg-blue-700 transition-transform hover:scale-105 active:scale-95">
+              <Globe size={24}/>
+          </button>
+          <AnimatePresence>
+              {isLangMenuOpen && (
+                  <motion.div initial={{ opacity: 0, scale: 0.9, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9, y: 20 }} className={`absolute bottom-16 ${isRTL ? 'left-0' : 'right-0'} mb-2 w-40 bg-white dark:bg-slate-800 rounded-2xl shadow-xl border dark:border-slate-700 overflow-hidden`}>
+                      {languages.map(l => (
+                          <button key={l.code} onClick={() => { setLang(l.code as Language); setIsLangMenuOpen(false); }} className={`w-full text-center px-4 py-3 text-sm font-bold transition-colors ${lang === l.code ? 'bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'}`}>
+                              {l.label}
+                          </button>
+                      ))}
+                  </motion.div>
+              )}
+          </AnimatePresence>
+      </div>
+
       {/* 🚀 Header & User Info */}
       <header className="px-6 pt-10 pb-6 rounded-b-[2.5rem] bg-gradient-to-br from-blue-700 to-slate-900 text-white shadow-xl relative overflow-hidden">
         <div className="absolute top-0 right-0 p-10 opacity-10 pointer-events-none"><Briefcase size={200}/></div>
@@ -221,7 +278,12 @@ export default function TechnicianDashboard() {
             <h1 className="text-3xl font-black mb-1">{c.welcome}، {userName.split(' ')[0]}</h1>
             <p className="text-sm font-bold text-blue-200 flex items-center gap-1"><MapPin size={14}/> {c.role}</p>
           </div>
-          <button onClick={async () => { await supabase.auth.signOut(); router.push('/login'); }} className="p-3 bg-white/10 hover:bg-red-500 rounded-2xl backdrop-blur-md transition"><LogOut size={20}/></button>
+          <div className="flex gap-2">
+            <button onClick={() => setIsDark(!isDark)} className="p-3 bg-white/10 hover:bg-white/20 rounded-2xl backdrop-blur-md transition">
+              {isDark ? <Sun size={20}/> : <Moon size={20}/>}
+            </button>
+            <button onClick={async () => { await supabase.auth.signOut(); router.push('/login'); }} className="p-3 bg-white/10 hover:bg-red-500 rounded-2xl backdrop-blur-md transition"><LogOut size={20}/></button>
+          </div>
         </div>
 
         {/* Attendance Card */}
@@ -229,7 +291,7 @@ export default function TechnicianDashboard() {
             <div>
                 <div className="text-[10px] font-bold text-blue-200 uppercase tracking-widest">{attendance.isCheckedIn ? c.statusOn : c.statusOff}</div>
                 <div className="text-3xl font-black font-mono mt-1">{currentTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</div>
-                {attendance.isCheckedIn && <div className="text-xs font-bold text-emerald-400 mt-1 flex items-center gap-1"><CheckCircle2 size={14}/> مسجل من: {attendance.time}</div>}
+                {attendance.isCheckedIn && <div className="text-xs font-bold text-emerald-400 mt-1 flex items-center gap-1"><CheckCircle2 size={14}/> {attendance.time}</div>}
             </div>
             <button onClick={handleAttendance} disabled={loading} className={`w-20 h-20 rounded-[1.5rem] flex flex-col items-center justify-center font-bold text-xs shadow-2xl transition active:scale-95 ${attendance.isCheckedIn ? 'bg-rose-500 text-white' : 'bg-emerald-500 text-white'}`}>
                 {loading ? <Loader2 className="animate-spin mb-1"/> : <Fingerprint size={28} className="mb-1"/>}
@@ -240,7 +302,7 @@ export default function TechnicianDashboard() {
 
       <main className="px-6 mt-6 space-y-8">
         
-        {/* 🚀 Pending Tasks (مهام تتطلب الموافقة) */}
+        {/* 🚀 Pending Tasks */}
         {pendingTasks.length > 0 && (
             <section>
                 <h3 className={`text-sm font-black mb-4 flex items-center gap-2 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}><AlertTriangle size={18} className="text-amber-500"/> {c.tasks.pending}</h3>
@@ -250,9 +312,8 @@ export default function TechnicianDashboard() {
                             <div className="flex justify-between items-start mb-3">
                                 <div>
                                     <h4 className={`font-black text-lg ${textMain}`}>{task.title}</h4>
-                                    <p className="text-xs font-bold text-blue-500 mt-1"><Users size={12} className="inline mr-1"/> مشرف: {task.manager_name}</p>
+                                    <p className="text-xs font-bold text-blue-500 mt-1"><Users size={12} className="inline mr-1"/> {task.manager_name}</p>
                                 </div>
-                                <span className="bg-amber-100 text-amber-700 px-3 py-1 rounded-xl text-[10px] font-bold animate-pulse">جديدة</span>
                             </div>
                             <p className="text-xs text-slate-500 mb-4 line-clamp-2">{task.task_description}</p>
                             <div className="flex gap-2">
@@ -265,7 +326,7 @@ export default function TechnicianDashboard() {
             </section>
         )}
 
-        {/* 🚀 Active Tasks (مشاريعي الحالية - جوهر العمل) */}
+        {/* 🚀 Active Tasks */}
         <section>
             <h3 className={`text-sm font-black mb-4 flex items-center gap-2 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}><Briefcase size={18} className="text-blue-500"/> {c.tasks.active}</h3>
             {activeTasks.length === 0 ? (
@@ -279,30 +340,15 @@ export default function TechnicianDashboard() {
                                 <ArrowLeft size={16} className={`text-blue-500 ${isRTL ? '' : 'rotate-180'}`}/>
                             </div>
                             <h4 className={`font-black text-xl mb-1 ${textMain}`}>{task.title}</h4>
-                            <div className="text-xs font-bold text-slate-500 line-clamp-1">{task.task_description}</div>
                         </div>
                     ))}
                 </div>
             )}
         </section>
 
-        {/* 🚀 General HR Requests Button */}
-        <section>
-            <button onClick={() => setIsHrModalOpen(true)} className={`w-full p-5 rounded-[2rem] border flex items-center justify-between shadow-sm transition active:scale-95 ${isDark ? 'bg-slate-900 border-slate-800 hover:border-purple-500' : 'bg-white border-slate-200 hover:border-purple-400'}`}>
-                <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-2xl bg-purple-100 text-purple-600 flex items-center justify-center"><FileText size={24}/></div>
-                    <div className="text-start">
-                        <div className={`font-black text-sm ${textMain}`}>{c.hr}</div>
-                        <div className="text-[10px] font-bold text-slate-500 mt-1">رفع إجازة، طلب تعريف، إلخ.</div>
-                    </div>
-                </div>
-                <ChevronRight size={20} className={`text-slate-400 ${isRTL ? 'rotate-180' : ''}`}/>
-            </button>
-        </section>
-
       </main>
 
-      {/* --- 🚀 TASK ACTION MODAL (Bottom Sheet Style) --- */}
+      {/* --- 🚀 TASK ACTION MODAL (Bottom Sheet) --- */}
       <AnimatePresence>
         {selectedTask && (
             <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-950/80 backdrop-blur-sm p-2 sm:p-4">
@@ -310,7 +356,6 @@ export default function TechnicianDashboard() {
                     initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }} transition={{ type: "spring", damping: 25, stiffness: 200 }}
                     className={`w-full max-w-lg rounded-t-[2.5rem] sm:rounded-[2.5rem] p-6 max-h-[90vh] overflow-y-auto shadow-2xl relative ${isDark ? 'bg-slate-900 border border-slate-700' : 'bg-white'}`}
                 >
-                    {/* المقبض (للموبايل) */}
                     <div className="w-12 h-1.5 bg-slate-300 dark:bg-slate-700 rounded-full mx-auto mb-6 sm:hidden"></div>
 
                     <div className="flex justify-between items-start mb-6">
@@ -327,7 +372,6 @@ export default function TechnicianDashboard() {
                         <button onClick={closeActionModal} className={`p-2 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500`}><X size={20}/></button>
                     </div>
 
-                    {/* 1. قائمة الخيارات (تظهر أولاً) */}
                     {actionStep === 'menu' ? (
                         <div className="grid grid-cols-2 gap-3">
                             <button onClick={()=>setActionStep('work_update')} className={`p-4 rounded-2xl border text-start transition active:scale-95 ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-200'}`}>
@@ -344,48 +388,42 @@ export default function TechnicianDashboard() {
                             </button>
                         </div>
                     ) : (
-                    /* 2. النماذج الفرعية بناءً على الاختيار */
                     <form onSubmit={submitActionRequest} className="space-y-5">
                         
-                        {/* نموذج تحديث العمل (صور) */}
                         {actionStep === 'work_update' && (
                             <div className="grid grid-cols-2 gap-4">
                                 <label className={`h-32 rounded-2xl border-2 border-dashed flex flex-col items-center justify-center cursor-pointer transition ${photosBefore.length > 0 ? 'bg-emerald-50 border-emerald-500 text-emerald-600' : isDark ? 'border-slate-700 bg-slate-800 text-slate-400' : 'border-slate-300 bg-slate-50 text-slate-500'}`}>
                                     <input type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => handleUploadImage(e, 'before')} />
                                     {photosBefore.length > 0 ? <CheckCircle2 size={32}/> : <Camera size={32}/>}
-                                    <span className="text-xs font-bold mt-2">{photosBefore.length > 0 ? 'تم الإرفاق' : c.forms.before}</span>
+                                    <span className="text-xs font-bold mt-2">{photosBefore.length > 0 ? '✓' : c.forms.before}</span>
                                 </label>
                                 <label className={`h-32 rounded-2xl border-2 border-dashed flex flex-col items-center justify-center cursor-pointer transition ${photosAfter.length > 0 ? 'bg-emerald-50 border-emerald-500 text-emerald-600' : isDark ? 'border-slate-700 bg-slate-800 text-slate-400' : 'border-slate-300 bg-slate-50 text-slate-500'}`}>
                                     <input type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => handleUploadImage(e, 'after')} />
                                     {photosAfter.length > 0 ? <CheckCircle2 size={32}/> : <Camera size={32}/>}
-                                    <span className="text-xs font-bold mt-2">{photosAfter.length > 0 ? 'تم الإرفاق' : c.forms.after}</span>
+                                    <span className="text-xs font-bold mt-2">{photosAfter.length > 0 ? '✓' : c.forms.after}</span>
                                 </label>
                             </div>
                         )}
 
-                        {/* حقول مشتركة للطلبات المالية أو المواد */}
                         {(actionStep === 'material' || actionStep === 'expense' || actionStep === 'custody') && (
                             <div className="space-y-4">
-                                {actionStep === 'material' && <input required type="text" placeholder="اسم المادة والكمية بدقة..." className={`w-full p-4 rounded-xl outline-none border font-bold text-sm ${isDark ? 'bg-slate-800 border-slate-700 text-white' : 'bg-slate-50 border-slate-200'}`} onChange={e => setFormData({...formData, qty: e.target.value})}/>}
-                                {(actionStep === 'expense' || actionStep === 'custody') && <input required type="number" placeholder="المبلغ المطلوب (ريال)" className={`w-full p-4 rounded-xl outline-none border font-bold text-sm ${isDark ? 'bg-slate-800 border-slate-700 text-white' : 'bg-slate-50 border-slate-200'}`} onChange={e => setFormData({...formData, amount: e.target.value})}/>}
-                                
+                                {actionStep === 'material' && <input required type="text" placeholder={c.forms.qty} className={`w-full p-4 rounded-xl outline-none border font-bold text-sm ${glassInput}`} onChange={e => setFormData({...formData, qty: e.target.value})}/>}
+                                {(actionStep === 'expense' || actionStep === 'custody') && <input required type="number" placeholder={c.forms.amount} className={`w-full p-4 rounded-xl outline-none border font-bold text-sm ${glassInput}`} onChange={e => setFormData({...formData, amount: e.target.value})}/>}
                                 <label className={`w-full h-16 rounded-xl border-2 border-dashed flex items-center justify-center cursor-pointer transition ${attachment ? 'bg-emerald-50 border-emerald-500 text-emerald-600' : isDark ? 'border-slate-700 bg-slate-800 text-slate-400' : 'border-slate-300 bg-slate-50 text-slate-500'}`}>
                                     <input type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => handleUploadImage(e, 'single')} />
-                                    <span className="text-xs font-bold flex gap-2 items-center">{attachment ? <CheckCircle2 size={16}/> : <Camera size={16}/>} {attachment ? 'تم إرفاق التسعيرة/الفاتورة' : 'إرفاق صورة تسعيرة أو فاتورة (اختياري)'}</span>
+                                    <span className="text-xs font-bold flex gap-2 items-center">{attachment ? <CheckCircle2 size={16}/> : <Camera size={16}/>}</span>
                                 </label>
                             </div>
                         )}
 
-                        {/* طلب عمالة */}
                         {actionStep === 'manpower' && (
                             <div className="grid grid-cols-2 gap-4">
-                                <input required type="text" placeholder="التخصص (مثال: سباك)" className={`w-full p-4 rounded-xl outline-none border font-bold text-sm ${isDark ? 'bg-slate-800 border-slate-700 text-white' : 'bg-slate-50 border-slate-200'}`} onChange={e => setFormData({...formData, role: e.target.value})}/>
-                                <input required type="number" placeholder="العدد" className={`w-full p-4 rounded-xl outline-none border font-bold text-sm ${isDark ? 'bg-slate-800 border-slate-700 text-white' : 'bg-slate-50 border-slate-200'}`} onChange={e => setFormData({...formData, qty: e.target.value})}/>
+                                <input required type="text" placeholder="Role..." className={`w-full p-4 rounded-xl outline-none border font-bold text-sm ${glassInput}`} onChange={e => setFormData({...formData, role: e.target.value})}/>
+                                <input required type="number" placeholder="Count..." className={`w-full p-4 rounded-xl outline-none border font-bold text-sm ${glassInput}`} onChange={e => setFormData({...formData, qty: e.target.value})}/>
                             </div>
                         )}
 
-                        {/* حقل الملاحظات المشترك */}
-                        <textarea required rows={3} onChange={e => setFormData({...formData, notes: e.target.value})} className={`w-full p-4 rounded-xl outline-none border resize-none font-bold text-sm ${isDark ? 'bg-slate-800 border-slate-700 text-white' : 'bg-slate-50 border-slate-200'}`} placeholder={c.forms.notes} />
+                        <textarea required rows={3} onChange={e => setFormData({...formData, notes: e.target.value})} className={`w-full p-4 rounded-xl outline-none border resize-none font-bold text-sm ${glassInput}`} placeholder={c.forms.notes} />
 
                         <div className="flex gap-3 pt-4 border-t border-slate-200 dark:border-slate-700">
                             <button type="button" onClick={()=>setActionStep('menu')} className={`flex-1 py-4 rounded-xl font-bold text-sm transition ${isDark ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-600'}`}>{c.forms.cancel}</button>
