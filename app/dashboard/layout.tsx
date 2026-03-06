@@ -1,28 +1,27 @@
 'use client';
 
-import React, { useState, createContext, useContext, useEffect, useMemo } from 'react';
+import React, { useState, createContext, useContext, useEffect, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { 
-  Users, ClipboardList, MapPin, DollarSign, FileText, LogOut, Bell, Shield, 
+  Users, MapPin, DollarSign, LogOut, Bell, Shield, 
   ChevronLeft, LayoutDashboard, PlusCircle, Share2, ListChecks, 
-  Calendar, Box, RefreshCw, GitPullRequest, Inbox, CheckSquare, 
-  Video, Folder, TrendingUp, Target, Receipt, Banknote, PieChart,
-  Sun, Moon, Globe, Briefcase,
-  BookOpen, ReceiptText, Calculator, LineChart, Landmark, ShieldCheck, Loader2, List,
-  HardDrive // أيقونة جديدة لخزنة البيانات
+  Calendar, Box, GitPullRequest, Inbox, CheckSquare, 
+  Video, Folder, TrendingUp, Target, Receipt, Banknote, 
+  Sun, Moon, Globe, Briefcase, Settings, 
+  BookOpen, ReceiptText, ShieldCheck, Loader2, List,
+  HardDrive, LayoutGrid, ChevronDown, CheckCircle2,
+  LifeBuoy, Send, X, Building2, FileSignature // 👈 تمت إضافة FileSignature للأيقونة الجديدة
 } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 
-// --- 1. تعريف أنواع البيانات ---
 type UserProfile = {
   id: string;
   full_name: string;
   role: string;
   job_title: string;
   email: string;
-  avatar?: string;
-  permissions: string[];
 };
 
 type ThemeContextType = {
@@ -39,12 +38,7 @@ const DashboardContext = createContext<ThemeContextType | undefined>(undefined);
 
 export const useDashboard = () => {
   const context = useContext(DashboardContext);
-  if (!context) {
-    return { 
-      isDark: false, lang: 'ar' as const, toggleTheme: () => {}, toggleLang: () => {}, 
-      t: { ar: {}, en: {} }, user: null, loadingUser: true 
-    }; 
-  }
+  if (!context) throw new Error("useDashboard must be used within DashboardContext");
   return context;
 };
 
@@ -57,89 +51,152 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [user, setUser] = useState<UserProfile | null>(null);
   const [loadingUser, setLoadingUser] = useState(true);
 
+  // الدوال المفقودة
   const toggleTheme = () => setIsDark(!isDark);
   const toggleLang = () => setLang(prev => prev === 'ar' ? 'en' : 'ar');
   const isRTL = lang === 'ar';
 
+  const [activePlugins, setActivePlugins] = useState<string[]>([]);
+  const [currentApp, setCurrentApp] = useState<'all' | string>('all');
+  const [showAppSwitcher, setShowAppSwitcher] = useState(false);
+  const switcherRef = useRef<HTMLDivElement>(null);
+
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const notifRef = useRef<HTMLDivElement>(null);
+
+  const [showHelpModal, setShowHelpModal] = useState(false);
+  const [ticketData, setTicketData] = useState({ subject: '', message: '', urgency: 'Normal' });
+  const [isSubmittingTicket, setIsSubmittingTicket] = useState(false);
+
   useEffect(() => {
-    const fetchUser = async () => {
+    function handleClickOutside(event: MouseEvent) {
+      if (notifRef.current && !notifRef.current.contains(event.target as Node)) setShowNotifications(false);
+      if (switcherRef.current && !switcherRef.current.contains(event.target as Node)) setShowAppSwitcher(false);
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    const fetchCoreData = async () => {
       try {
         const { data: { user: authUser } } = await supabase.auth.getUser();
         if (!authUser) { router.push('/login'); return; }
 
-        const { data: profile, error } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', authUser.id)
-          .single();
+        const { data: profile } = await supabase.from('profiles').select('*').eq('id', authUser.id).single();
+        if (profile) setUser(profile);
 
-        if (error) throw error;
-        setUser(profile);
+        const { data: plugins } = await supabase.from('system_plugins').select('plugin_key').eq('is_active', true);
+        if (plugins) setActivePlugins(plugins.map(p => p.plugin_key));
+
+        const { data: notifs } = await supabase
+          .from('notifications')
+          .select('id, title_ar, title_en, message_ar, message_en, created_at, status')
+          .or(`user_id.eq.${authUser.id},user_id.is.null`)
+          .order('created_at', { ascending: false })
+          .limit(10);
+        if (notifs) setNotifications(notifs);
+
       } catch (error) {
-        console.error("Error fetching profile:", error);
-        router.push('/login');
+        console.error("Error fetching data:", error);
       } finally {
         setLoadingUser(false);
       }
     };
-    fetchUser();
+    fetchCoreData();
   }, [router]);
 
-  // --- القاموس ---
+  const handleSubmitTicket = async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!user || !ticketData.subject || !ticketData.message) return;
+      setIsSubmittingTicket(true);
+      
+      try {
+          const { error } = await supabase.from('support_tickets').insert({
+              user_id: user.id,
+              subject: ticketData.subject,
+              message: ticketData.message,
+              urgency: ticketData.urgency
+          });
+          
+          if (error) throw error;
+          
+          alert(isRTL ? 'تم الإرسال بنجاح.' : 'Ticket submitted.');
+          setShowHelpModal(false);
+          setTicketData({ subject: '', message: '', urgency: 'Normal' });
+      } catch (error: any) {
+          alert('Error: ' + error.message);
+      } finally {
+          setIsSubmittingTicket(false);
+      }
+  };
+
   const t = {
     ar: { 
-        logout: 'تسجيل الخروج', headerTitle: 'نظام إدارة الموارد GMS', 
+        logout: 'تسجيل الخروج', headerTitle: 'نظام إدارة الموارد GMS', allApps: 'كل التطبيقات',
         menu: {
             sys: 'إدارة النظام', main: 'الرئيسية', users: 'المستخدمين', track: 'التتبع المباشر',
-            proj: 'المشاريع والمهام', proj_list: 'قائمة المشاريع', new_task: 'مهمة جديدة', assign: 'توزيع المهام', progress: 'الإنجاز', timeline: 'الجدول الزمني', resources: 'الموارد', update: 'تحديث الحالة', team: 'فريق العمل',
+            proj: 'المشاريع والمهام', proj_list: 'قائمة المشاريع', new_task: 'إنشاء مشروع جديد', assign: 'توزيع المهام', progress: 'الإنجاز', timeline: 'الجدول الزمني', team: 'فريق العمل',
+            subcontractors: 'المقاولين الرئيسيين',
             ops: 'العمليات', workflow: 'سير العمل', requests: 'الطلبات', quality: 'الجودة',
-            // --- التعديل هنا في الترجمة ---
-            comm: 'التواصل والملفات', meet: 'جدولة الاجتماعات', vault: 'خزنة البيانات والملفات', notif: 'الإشعارات',
-            perf: 'التقارير والأداء', prod: 'الإنتاجية', kpi: 'مؤشرات الأداء', boards: 'اللوحات',
-            fin: 'المالية', fin_gl: 'القيود', fin_invoices: 'الفوترة', fin_expenses: 'المصروفات', fin_payroll: 'الرواتب', fin_budget: 'الميزانية'
+            comm: 'التواصل والملفات', meet: 'الاجتماعات', vault: 'خزنة الملفات', notif: 'الإشعارات',
+            perf: 'التقارير والأداء', prod: 'الإنتاجية', kpi: 'مؤشرات الأداء', boards: 'اللوحات', hr_actions: 'سجل القرارات والإجراءات', // 👈 تمت الإضافة هنا
+            fin: 'المالية', fin_gl: 'القيود', fin_invoices: 'الفوترة', fin_expenses: 'المصروفات', fin_payroll: 'الرواتب',
+            settings: 'الإعدادات', appManager: 'إدارة التطبيقات'
+        },
+        apps: { all: 'الكل', ops: 'العمليات والمشاريع', fin: 'المالية والحسابات', comm: 'التواصل والمستندات', sys: 'النظام والإعدادات' },
+        help: {
+            title: 'مركز المساعدة', subject: 'العنوان', message: 'الوصف',
+            urgency: 'الأهمية', low: 'عادية', normal: 'متوسطة', high: 'عاجلة', cancel: 'إلغاء', submit: 'إرسال'
+        },
+        notifications: {
+          title: 'الإشعارات', empty: 'لا توجد إشعارات', viewAll: 'عرض الكل'
         }
     },
     en: { 
-        logout: 'Logout', headerTitle: 'GMS ERP System', 
+        logout: 'Logout', headerTitle: 'GMS ERP System', allApps: 'All Apps',
         menu: {
             sys: 'System Admin', main: 'Dashboard', users: 'Users', track: 'Live Tracking',
-            proj: 'Projects', proj_list: 'Projects List', new_task: 'New Task', assign: 'Assign', progress: 'Progress', timeline: 'Timeline', resources: 'Resources', update: 'Update', team: 'Team',
+            proj: 'Projects', proj_list: 'Projects List', new_task: 'New Task', assign: 'Assign', progress: 'Progress', timeline: 'Timeline', team: 'Team',
+            subcontractors: 'Subcontractors',
             ops: 'Operations', workflow: 'Workflow', requests: 'Requests', quality: 'Quality',
-            // --- التعديل هنا في الترجمة ---
-            comm: 'Comms & Files', meet: 'Meetings Schedule', vault: 'Data Vault & Files', notif: 'Notifications',
-            perf: 'Reports', prod: 'Productivity', kpi: 'KPIs', boards: 'Dashboards',
-            fin: 'Finance', fin_gl: 'GL', fin_invoices: 'Invoicing', fin_expenses: 'Expenses', fin_payroll: 'Payroll', fin_budget: 'Budget'
+            comm: 'Comms & Files', meet: 'Meetings', vault: 'Data Vault', notif: 'Notifications',
+            perf: 'Reports', prod: 'Productivity', kpi: 'KPIs', boards: 'Dashboards', hr_actions: 'HR Actions Log', // 👈 تمت الإضافة هنا
+            fin: 'Finance', fin_gl: 'GL', fin_invoices: 'Invoicing', fin_expenses: 'Expenses', fin_payroll: 'Payroll',
+            settings: 'Settings', appManager: 'App Manager'
+        },
+        apps: { all: 'All Apps', ops: 'Operations & Projects', fin: 'Finance', comm: 'Comms & DMS', sys: 'System & Settings' },
+        help: {
+            title: 'Support', subject: 'Subject', message: 'Message',
+            urgency: 'Urgency', low: 'Low', normal: 'Normal', high: 'High', cancel: 'Cancel', submit: 'Submit'
+        },
+        notifications: {
+          title: 'Notifications', empty: 'No notifications', viewAll: 'View All'
         }
     }
   };
   const currentT = t[lang];
 
-  // --- 🔥 القائمة الجانبية الذكية (Filtered Navigation) ---
   const navigation = useMemo(() => {
     if (!user) return [];
     const userRole = user.role;
 
     const fullNavigation = [
       {
-        title: currentT.menu.sys,
-        icon: <Shield size={20} />,
-        allowedRoles: ['super_admin'],
+        title: currentT.menu.sys, pluginKey: 'core', appKey: 'sys', icon: <Shield size={20} />, allowedRoles: ['super_admin'],
         items: [
-          { label: currentT.menu.main, href: '/dashboard', icon: <LayoutDashboard size={18} /> },
           { label: currentT.menu.users, href: '/dashboard/users', icon: <Users size={18} /> },
           { label: currentT.menu.track, href: '/dashboard/map', icon: <MapPin size={18} /> },
         ]
       },
       {
-        title: currentT.menu.proj,
-        icon: <Briefcase size={20} />,
-        allowedRoles: ['super_admin', 'admin', 'project_manager', 'engineer'],
+        title: currentT.menu.proj, pluginKey: 'operations', appKey: 'ops', icon: <Briefcase size={20} />, allowedRoles: ['super_admin', 'admin', 'project_manager', 'engineer'],
         items: [
           { label: currentT.menu.main, href: '/dashboard', icon: <LayoutDashboard size={18} /> },
           { label: currentT.menu.proj_list, href: '/dashboard/projects/list', icon: <List size={18} /> },
-          ...( ['super_admin', 'admin'].includes(userRole) 
-                ? [{ label: currentT.menu.new_task, href: '/dashboard/projects/create', icon: <PlusCircle size={18} /> }] 
-                : [] ),
+          ...( ['super_admin', 'admin'].includes(userRole) ? [{ label: currentT.menu.new_task, href: '/dashboard/projects/create', icon: <PlusCircle size={18} /> }] : [] ),
+          { label: currentT.menu.subcontractors, href: '/dashboard/subcontractors', icon: <Building2 size={18} /> },
           { label: currentT.menu.assign, href: '/dashboard/projects/assign', icon: <Share2 size={18} /> },
           { label: currentT.menu.progress, href: '/dashboard/projects/progress', icon: <ListChecks size={18} /> },
           { label: currentT.menu.timeline, href: '/dashboard/projects/timeline', icon: <Calendar size={18} /> },
@@ -147,101 +204,131 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         ]
       },
       {
-        title: currentT.menu.ops,
-        icon: <GitPullRequest size={20} />,
-        allowedRoles: ['super_admin', 'admin', 'project_manager'],
+        title: currentT.menu.ops, pluginKey: 'operations', appKey: 'ops', icon: <GitPullRequest size={20} />, allowedRoles: ['super_admin', 'admin', 'project_manager'],
         items: [
           { label: currentT.menu.workflow, href: '/dashboard/operations/workflow', icon: <GitPullRequest size={18} /> },
           { label: currentT.menu.requests, href: '/dashboard/operations/requests', icon: <Inbox size={18} /> },
           { label: currentT.menu.quality, href: '/dashboard/operations/quality', icon: <CheckSquare size={18} /> },
         ]
       },
-      // --- 🔥 التعديل المطلوب في هذا القسم ---
       {
-        title: currentT.menu.comm,
-        icon: <Folder size={20} />, // تغيير الأيقونة الرئيسية لتناسب المجلدات والتواصل
-        allowedRoles: ['super_admin', 'admin', 'project_manager', 'engineer'],
+        title: currentT.menu.comm, pluginKey: 'comms', appKey: 'comm', icon: <Folder size={20} />, allowedRoles: ['super_admin', 'admin', 'project_manager', 'engineer'],
         items: [
           { label: currentT.menu.notif, href: '/dashboard/communication/notifications', icon: <Bell size={18} /> },
           { label: currentT.menu.meet, href: '/dashboard/communication/meetings', icon: <Video size={18} /> },
           { label: currentT.menu.vault, href: '/dashboard/communication/files', icon: <HardDrive size={18} /> },
         ]
       },
-      // ----------------------------------------
       {
-        title: currentT.menu.perf,
-        icon: <TrendingUp size={20} />,
-        allowedRoles: ['super_admin'],
+        title: currentT.menu.perf, pluginKey: 'core', appKey: 'sys', icon: <TrendingUp size={20} />, allowedRoles: ['super_admin', 'admin', 'project_manager'],
         items: [
           { label: currentT.menu.prod, href: '/dashboard/reports/productivity', icon: <TrendingUp size={18} /> },
           { label: currentT.menu.kpi, href: '/dashboard/reports/kpi', icon: <Target size={18} /> },
           { label: currentT.menu.boards, href: '/dashboard/reports/dashboards', icon: <LayoutDashboard size={18} /> },
+          // 🚀 تمت إضافة خيار سجل القرارات الإدارية هنا 🚀
+          { label: currentT.menu.hr_actions, href: '/dashboard/reports/hr-actions', icon: <FileSignature size={18} /> },
         ]
       },
       {
-        title: currentT.menu.fin,
-        icon: <DollarSign size={20} />,
-        allowedRoles: ['super_admin', 'admin', 'accountant'],
+        title: currentT.menu.fin, pluginKey: 'finance', appKey: 'fin', icon: <DollarSign size={20} />, allowedRoles: ['super_admin', 'admin', 'accountant'],
         items: [
           { label: currentT.menu.fin_gl, href: '/dashboard/finance/general-ledger', icon: <BookOpen size={18} /> },
           { label: currentT.menu.fin_invoices, href: '/dashboard/finance/e-invoicing', icon: <ReceiptText size={18} /> },
           { label: currentT.menu.fin_expenses, href: '/dashboard/finance/expenses', icon: <Receipt size={18} /> },
           { label: currentT.menu.fin_payroll, href: '/dashboard/finance/payroll', icon: <Banknote size={18} /> },
         ]
+      },
+      {
+        title: currentT.menu.settings, pluginKey: 'core', appKey: 'sys', icon: <Settings size={20} />, allowedRoles: ['super_admin', 'admin'],
+        items: [
+          { label: currentT.menu.appManager, href: '/dashboard/settings/plugins', icon: <Box size={18} /> },
+        ]
       }
     ];
 
-    return fullNavigation.filter(section => section.allowedRoles.includes(userRole));
-  }, [user, lang, currentT]);
+    return fullNavigation.filter(section => {
+      const roleAllowed = section.allowedRoles.includes(userRole);
+      const pluginActive = section.pluginKey === 'core' || activePlugins.includes(section.pluginKey);
+      const appSelected = currentApp === 'all' || section.appKey === currentApp;
+      return roleAllowed && pluginActive && appSelected;
+    });
+
+  }, [user, lang, currentT, activePlugins, currentApp]);
+
+  const appOptions = [
+      { id: 'all', label: currentT.apps.all, icon: <LayoutGrid size={18}/>, color: 'text-blue-500' },
+      { id: 'ops', label: currentT.apps.ops, icon: <Briefcase size={18}/>, color: 'text-blue-500', reqPlugin: 'operations' },
+      { id: 'fin', label: currentT.apps.fin, icon: <DollarSign size={18}/>, color: 'text-emerald-500', reqPlugin: 'finance' },
+      { id: 'comm', label: currentT.apps.comm, icon: <Folder size={18}/>, color: 'text-purple-500', reqPlugin: 'comms' },
+      { id: 'sys', label: currentT.apps.sys, icon: <Settings size={18}/>, color: 'text-slate-500', reqPlugin: 'core' },
+  ].filter(app => !app.reqPlugin || app.reqPlugin === 'core' || activePlugins.includes(app.reqPlugin));
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
     router.push('/login');
   };
 
-  const isTechnicianPage = pathname?.includes('/technician');
   const bgMain = isDark ? 'bg-slate-950' : 'bg-slate-50';
   const textMain = isDark ? 'text-white' : 'text-slate-900';
   const sidebarBg = 'bg-slate-900 border-slate-800';
   const headerBg = isDark ? 'bg-slate-900/90 border-slate-800' : 'bg-white/90 border-slate-200';
+  const unreadCount = notifications.filter(n => n.status === 'Unread').length;
 
-  if (loadingUser) {
-    return (
-        <div className="min-h-screen flex items-center justify-center bg-slate-50">
-            <div className="flex flex-col items-center gap-4">
-                <Loader2 className="w-10 h-10 text-blue-600 animate-spin" />
-                <p className="text-slate-500 font-bold text-sm">جاري التحقق من الصلاحيات...</p>
-            </div>
-        </div>
-    );
+  if (loadingUser) return null;
+
+  if (pathname?.includes('/technician') || user?.role === 'technician') {
+      return (
+          <DashboardContext.Provider value={{ isDark, lang, toggleTheme, toggleLang, t, user, loadingUser }}>
+              <div className={`min-h-screen font-sans ${isRTL ? 'dir-rtl' : 'dir-ltr'}`} dir={isRTL ? 'rtl' : 'ltr'}>{children}</div>
+          </DashboardContext.Provider>
+      );
   }
 
   return (
     <DashboardContext.Provider value={{ isDark, lang, toggleTheme, toggleLang, t, user, loadingUser }}>
-      {isTechnicianPage || user?.role === 'technician' ? (
-         <div className={`min-h-screen font-sans ${isRTL ? 'dir-rtl' : 'dir-ltr'}`} dir={isRTL ? 'rtl' : 'ltr'}>
-            {children}
-         </div>
-      ) : (
       <div className={`flex h-screen font-sans transition-colors duration-300 ${bgMain} ${textMain} ${isRTL ? 'dir-rtl' : 'dir-ltr'}`} dir={isRTL ? 'rtl' : 'ltr'}>
+        
         <aside className={`w-72 hidden md:flex flex-col shadow-2xl z-20 overflow-y-auto custom-scrollbar transition-colors duration-300 ${sidebarBg} text-white`}>
-          <div className="p-6 border-b border-white/10 shrink-0 sticky top-0 bg-inherit z-10">
-            <Link href="/" className="flex items-center gap-3 cursor-pointer hover:opacity-80 transition-opacity group">
-              <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center font-bold text-xl shadow-lg group-hover:scale-105 transition-transform">G</div>
+          <div className="p-6 border-b border-white/10 shrink-0 sticky top-0 bg-inherit z-20" ref={switcherRef}>
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center font-bold text-xl shadow-lg">G</div>
               <div>
                 <h1 className="font-bold text-lg tracking-wide">GMS System</h1>
-                <p className="text-xs text-slate-400 group-hover:text-blue-200 transition-colors">ERP Platform</p>
+                <p className="text-xs text-slate-400">ERP Platform</p>
               </div>
-            </Link>
+            </div>
+
+            <button onClick={() => setShowAppSwitcher(!showAppSwitcher)} className="w-full flex items-center justify-between bg-slate-800 hover:bg-slate-700 border border-slate-700 p-3 rounded-xl transition text-sm font-bold">
+                <div className="flex items-center gap-2">
+                    {appOptions.find(a => a.id === currentApp)?.icon}
+                    <span>{appOptions.find(a => a.id === currentApp)?.label}</span>
+                </div>
+                <ChevronDown size={16} className={`transition-transform ${showAppSwitcher ? 'rotate-180' : ''}`}/>
+            </button>
+
+            <AnimatePresence>
+                {showAppSwitcher && (
+                    <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="absolute top-full left-6 right-6 mt-2 bg-slate-800 border border-slate-700 rounded-xl shadow-2xl overflow-hidden">
+                        {appOptions.map(app => (
+                            <button key={app.id} onClick={() => { setCurrentApp(app.id); setShowAppSwitcher(false); }} className={`w-full flex items-center gap-3 p-3 text-sm font-bold transition hover:bg-slate-700 ${currentApp === app.id ? 'bg-slate-700' : ''}`}>
+                                <span className={app.color}>{app.icon}</span><span>{app.label}</span>
+                                {currentApp === app.id && <CheckCircle2 size={14} className="ml-auto rtl:mr-auto rtl:ml-0 text-blue-500"/>}
+                            </button>
+                        ))}
+                    </motion.div>
+                )}
+            </AnimatePresence>
           </div>
+
           <nav className="flex-1 p-4 space-y-1">
             {navigation.map((section, index) => (
               <SidebarGroup key={index} title={section.title} icon={section.icon} items={section.items} pathname={pathname} />
             ))}
           </nav>
+
           <div className="p-4 border-t border-white/10 shrink-0">
             <div className="mb-4 px-2">
-                <div className="text-xs text-slate-400 mb-1">حساب:</div>
+                <div className="text-xs text-slate-400 mb-1">{isRTL ? 'حساب:' : 'Account:'}</div>
                 <div className="font-bold text-sm text-blue-400 truncate">{user?.email}</div>
             </div>
             <button onClick={handleLogout} className="flex items-center gap-3 text-red-400 hover:bg-white/5 w-full px-4 py-3 rounded-xl transition font-bold text-sm">
@@ -249,17 +336,69 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             </button>
           </div>
         </aside>
+        
         <div className="flex-1 flex flex-col h-screen overflow-hidden relative">
           <header className={`h-20 flex justify-between items-center px-8 shadow-sm flex-shrink-0 backdrop-blur-md border-b z-30 transition-colors duration-300 ${headerBg}`}>
-            <h2 className={`text-xl font-bold ${textMain}`}>{currentT.headerTitle}</h2>
-            <div className="flex items-center gap-4">
+            <h2 className={`text-xl font-bold hidden sm:block ${textMain}`}>{appOptions.find(a => a.id === currentApp)?.label}</h2>
+            <div className="flex items-center gap-4 ml-auto rtl:mr-auto rtl:ml-0">
+              
+              <button onClick={() => setShowHelpModal(true)} className={`p-2.5 rounded-full transition flex items-center gap-2 ${isDark ? 'bg-blue-900/20 text-blue-400 hover:bg-blue-900/40' : 'bg-blue-50 text-blue-600 hover:bg-blue-100'}`}>
+                <LifeBuoy size={18}/>
+                <span className="text-xs font-bold hidden md:block">{isRTL ? 'المساعدة' : 'Help'}</span>
+              </button>
+
+              <div className="relative" ref={notifRef}>
+                  <button onClick={() => setShowNotifications(!showNotifications)} className={`relative p-2.5 rounded-full transition ${isDark ? 'bg-slate-800 text-slate-300 hover:text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+                    <Bell size={18}/>
+                    {unreadCount > 0 && <span className="absolute top-1 right-1.5 w-2 h-2 bg-red-500 rounded-full animate-pulse border border-white dark:border-slate-800"></span>}
+                  </button>
+
+                  <AnimatePresence>
+                    {showNotifications && (
+                        <motion.div initial={{ opacity: 0, y: 10, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                            className={`absolute top-full mt-3 w-80 rounded-2xl shadow-2xl border overflow-hidden ${isRTL ? 'left-0' : 'right-0'} ${isDark ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-200'}`}
+                        >
+                            <div className={`p-4 border-b flex justify-between items-center ${isDark ? 'border-slate-800 bg-slate-900/50' : 'border-slate-100 bg-slate-50'}`}>
+                                <h4 className={`font-bold text-sm ${textMain}`}>{currentT.notifications.title}</h4>
+                                {unreadCount > 0 && <span className="bg-red-100 text-red-600 px-2 py-0.5 rounded text-[10px] font-bold">{unreadCount}</span>}
+                            </div>
+                            <div className="max-h-80 overflow-y-auto custom-scrollbar">
+                                {notifications.length === 0 ? (
+                                    <div className={`p-6 text-center text-sm ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{currentT.notifications.empty}</div>
+                                ) : (
+                                    <div className={`divide-y ${isDark ? 'divide-slate-800' : 'divide-slate-100'}`}>
+                                        {notifications.map(n => (
+                                            <Link href="/dashboard/communication/notifications" onClick={() => setShowNotifications(false)} key={n.id} className={`block p-4 transition ${n.status === 'Unread' ? (isDark ? 'bg-slate-800/50' : 'bg-blue-50/50') : (isDark ? 'hover:bg-slate-800' : 'hover:bg-slate-50')}`}>
+                                                <div className="flex justify-between items-start mb-1">
+                                                    <h5 className={`text-sm font-bold truncate pr-4 ${textMain}`}>{isRTL ? n.title_ar : n.title_en}</h5>
+                                                    {n.status === 'Unread' && <span className="w-2 h-2 rounded-full bg-blue-600 mt-1.5 shrink-0"></span>}
+                                                </div>
+                                                <p className={`text-xs line-clamp-1 mb-2 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{isRTL ? n.message_ar : n.message_en}</p>
+                                                <div className={`text-[10px] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{new Date(n.created_at).toLocaleDateString()}</div>
+                                            </Link>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                            <div className={`p-2 border-t ${isDark ? 'border-slate-800 bg-slate-900/50' : 'border-slate-100 bg-slate-50'}`}>
+                                <Link href="/dashboard/communication/notifications" onClick={() => setShowNotifications(false)} className={`block text-center text-xs font-bold py-2 rounded-lg transition ${isDark ? 'text-blue-400 hover:bg-slate-800' : 'text-blue-600 hover:bg-slate-200'}`}>
+                                    {currentT.notifications.viewAll}
+                                </Link>
+                            </div>
+                        </motion.div>
+                    )}
+                  </AnimatePresence>
+              </div>
+
               <button onClick={toggleTheme} className={`p-2 rounded-full transition ${isDark ? 'bg-slate-800 text-yellow-400 hover:bg-slate-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
                 {isDark ? <Sun size={18}/> : <Moon size={18}/>}
               </button>
               <button onClick={toggleLang} className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-bold transition border ${isDark ? 'bg-slate-800 border-slate-700 text-slate-300' : 'bg-slate-100 border-slate-200 text-slate-600'}`}>
                 <Globe size={16}/> {lang === 'ar' ? 'EN' : 'عربي'}
               </button>
+              
               <div className={`w-px h-8 mx-1 ${isDark ? 'bg-slate-700' : 'bg-slate-200'}`}></div>
+              
               <div className={`flex items-center gap-3 pl-2 border-l ${isDark ? 'border-slate-700' : 'border-slate-200'}`}>
                   <div className="text-left hidden sm:block">
                       <div className={`text-sm font-bold ${textMain}`}>{user?.full_name}</div>
@@ -271,12 +410,49 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               </div>
             </div>
           </header>
+          
           <main className={`flex-1 overflow-y-auto p-8 custom-scrollbar transition-colors duration-300 ${bgMain}`}>
             {children}
           </main>
         </div>
       </div>
-      )}
+
+      <AnimatePresence>
+        {showHelpModal && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+                <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }} className={`w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden border ${isDark ? 'bg-slate-900 border-slate-700' : 'bg-white border-white'}`}>
+                    <div className={`p-5 border-b flex justify-between items-center ${isDark ? 'border-slate-800 bg-slate-800/30' : 'border-slate-100 bg-slate-50'}`}>
+                        <h3 className={`font-bold text-lg flex items-center gap-2 ${isDark ? 'text-white' : 'text-slate-900'}`}><LifeBuoy className="text-blue-500" /> {currentT.help.title}</h3>
+                        <button onClick={() => setShowHelpModal(false)} className={`p-2 rounded-full transition ${isDark ? 'hover:bg-slate-700 text-slate-400' : 'hover:bg-slate-200 text-slate-500'}`}><X size={20}/></button>
+                    </div>
+
+                    <form onSubmit={handleSubmitTicket} className="p-6 space-y-5">
+                        <div>
+                            <label className={`text-xs font-bold mb-1.5 block ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{currentT.help.subject}</label>
+                            <input required type="text" value={ticketData.subject} onChange={e => setTicketData({...ticketData, subject: e.target.value})} className={`w-full rounded-xl px-4 py-3 outline-none transition text-sm font-bold border focus:ring-2 ${isDark ? 'bg-slate-800 border-slate-700 text-white focus:ring-blue-500/50' : 'bg-slate-50 border-slate-200 text-slate-900 focus:ring-blue-100'}`} />
+                        </div>
+                        <div>
+                            <label className={`text-xs font-bold mb-1.5 block ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{currentT.help.urgency}</label>
+                            <select value={ticketData.urgency} onChange={e => setTicketData({...ticketData, urgency: e.target.value})} className={`w-full rounded-xl px-4 py-3 outline-none transition text-sm font-bold border focus:ring-2 ${isDark ? 'bg-slate-800 border-slate-700 text-white focus:ring-blue-500/50' : 'bg-slate-50 border-slate-200 text-slate-900 focus:ring-blue-100'}`}>
+                                <option value="Low">{currentT.help.low}</option><option value="Normal">{currentT.help.normal}</option><option value="High">{currentT.help.high}</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label className={`text-xs font-bold mb-1.5 block ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{currentT.help.message}</label>
+                            <textarea required value={ticketData.message} onChange={e => setTicketData({...ticketData, message: e.target.value})} className={`w-full rounded-xl px-4 py-3 outline-none transition text-sm border focus:ring-2 h-32 resize-none ${isDark ? 'bg-slate-800 border-slate-700 text-white focus:ring-blue-500/50' : 'bg-slate-50 border-slate-200 text-slate-900 focus:ring-blue-100'}`} />
+                        </div>
+
+                        <div className={`pt-5 mt-2 border-t flex gap-3 ${isDark ? 'border-slate-800' : 'border-slate-100'}`}>
+                            <button type="button" onClick={() => setShowHelpModal(false)} className={`flex-1 py-3 rounded-xl font-bold text-sm transition border ${isDark ? 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700' : 'bg-white border-slate-300 text-slate-600 hover:bg-slate-50'}`}>{currentT.help.cancel}</button>
+                            <button type="submit" disabled={isSubmittingTicket} className="flex-[2] py-3 bg-blue-600 text-white rounded-xl font-bold text-sm hover:bg-blue-700 shadow-lg shadow-blue-500/20 transition flex items-center justify-center gap-2 disabled:opacity-50">
+                                {isSubmittingTicket ? <Loader2 size={18} className="animate-spin"/> : <Send size={18}/>} {currentT.help.submit}
+                            </button>
+                        </div>
+                    </form>
+                </motion.div>
+            </div>
+        )}
+      </AnimatePresence>
     </DashboardContext.Provider>
   );
 }
@@ -284,6 +460,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 function SidebarGroup({ title, icon, items, pathname }: any) {
   const isActiveGroup = items?.some((item: any) => pathname === item.href);
   const [isOpen, setIsOpen] = useState(isActiveGroup);
+  useEffect(() => { setIsOpen(isActiveGroup); }, [isActiveGroup]);
+
   return (
     <div className="mb-2">
       <button onClick={() => setIsOpen(!isOpen)} className={`w-full flex items-center justify-between p-3 rounded-xl transition-all duration-200 ${isOpen ? 'bg-blue-600/10 text-blue-400' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}>

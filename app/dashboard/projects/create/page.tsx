@@ -2,54 +2,29 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import dynamic from 'next/dynamic';
 import { supabase } from '@/lib/supabase';
-import imageCompression from 'browser-image-compression';
 import { 
   MapPin, Users, Calendar, FileText, 
-  Shield, ArrowLeft, ArrowRight, 
-  Cpu, Sparkles, CheckCircle2, ChevronDown, 
-  Briefcase, Layers, UploadCloud, HardHat, FileCheck, X, Plus, Loader2, DollarSign, Search, Star, File as FileIcon, Building2
+  ArrowLeft, ArrowRight, CheckCircle2, 
+  Briefcase, UploadCloud, X, Plus, Loader2, 
+  DollarSign, Building2, Phone, User, TrendingUp, Clock, File as FileIcon, Wrench, HardHat
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { useDashboard } from '../../layout';
 
-const ProjectMapPicker = dynamic(() => import('@/components/ProjectMapPicker'), { 
-  ssr: false,
-  loading: () => <div className="h-full w-full bg-slate-100/50 animate-pulse flex items-center justify-center text-slate-400 rounded-3xl">جاري تحميل الخريطة...</div>
-});
-
-// --- Types ---
-type ProjectCategory = 'Maintenance' | 'Cable Testing' | 'Infrastructure' | 'Tech Support' | 'Emergency';
-
-interface ManagerData { id: string; full_name: string; completion_rate: number; active_projects: number; }
-interface Subcontractor { id: string; name: string; }
-
-interface ProjectData {
-  title: string;
-  category: ProjectCategory;
-  type: string;
-  status: string;
-  startDate: string;
-  endDate: string;
-  clientName: string;
-  budget: string;
-  locationName: string;
-  coordinates: { lat: number; lng: number };
-  managers: ManagerData[]; 
-  equipment: string[];
-  complianceItems: Record<string, boolean>;
-  subcontractorId: string; // 👈 إضافة المقاول
-  contractType: 'Direct' | 'Subcontract'; // 👈 إضافة نوع العقد
-}
-
-const STEPS = [
-  { id: 1, label: { ar: 'هوية المشروع', en: 'Identity' }, desc: {ar: 'التفاصيل الأساسية', en: 'Basic Info'}, icon: Briefcase },
-  { id: 2, label: { ar: 'الجدول والميزانية', en: 'Timeline' }, desc: {ar: 'الوقت والتكلفة', en: 'Time & Cost'}, icon: Calendar },
-  { id: 3, label: { ar: 'الموقع والنطاق', en: 'Location' }, desc: {ar: 'الإحداثيات', en: 'Coordinates'}, icon: MapPin },
-  { id: 4, label: { ar: 'المدراء والموارد', en: 'Resources' }, desc: {ar: 'القيادة والمعدات', en: 'Leadership & Eqp'}, icon: Users },
-  { id: 5, label: { ar: 'الامتثال', en: 'Compliance' }, desc: {ar: 'المخاطر والعقود', en: 'Risk & Contracts'}, icon: Shield },
+const PROJECT_CATEGORIES = [
+  'الصيانة والتشغيل', 'الإنشاءات والمقاولات', 'تمديد الكابلات', 'البنية التحتية', 
+  'الدعم الفني', 'نظافة المدن', 'تنسيق الحدائق', 'صيانة المباني', 
+  'شبكات المياه', 'شبكات الصرف الصحي', 'سفلتة ورصف', 'إنارة الشوارع', 
+  'صيانة المضخات', 'أعمال العزل', 'تركيب المصاعد', 'التكييف والتبريد', 
+  'أنظمة الحريق', 'شبكات الاتصالات', 'إدارة المرافق', 'أخرى'
 ];
+
+const ENTITY_TYPES = ['أمانة / بلدية', 'شركة الكهرباء', 'شركة المياه الوطنية', 'وزارة النقل', 'إمارة المنطقة', 'جهة خاصة', 'أخرى'];
+
+// --- قوائم المقترحات السريعة ---
+const PREDEFINED_EQUIPMENT = ['حفارة بوكلين', 'رافعة (كرين) 50 طن', 'مولد كهربائي احتياطي', 'سيارة فحص كابلات', 'معدات سفلتة', 'مضخات مياه نزح', 'سقالات معدنية'];
+const PREDEFINED_TOOLS = ['حقيبة سلامة ومهمات وقاية (PPE)', 'أجهزة قياس وفحص (ملميتر/ميجر)', 'أدوات يدوية متكاملة', 'معدات لحام', 'لوحات وعلامات تحذيرية', 'أجهزة اتصال لاسلكي'];
 
 export default function EnterpriseProjectCreate() {
   const router = useRouter();
@@ -57,466 +32,582 @@ export default function EnterpriseProjectCreate() {
   const isRTL = lang === 'ar';
   
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [currentStep, setCurrentStep] = useState(1);
-  const [isAiLoading, setIsAiLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  
-  // Smart Manager Logic
-  const [availableManagers, setAvailableManagers] = useState<ManagerData[]>([]);
-  const [managerSearch, setManagerSearch] = useState('');
-  const [loadingManagers, setLoadingManagers] = useState(true);
+  const [uploadingFiles, setUploadingFiles] = useState(false);
 
-  // Subcontractor Logic
-  const [subcontractors, setSubcontractors] = useState<Subcontractor[]>([]);
-  const [isNewSubModalOpen, setIsNewSubModalOpen] = useState(false);
-  const [newSubName, setNewSubName] = useState('');
-  const [isCreatingSub, setIsCreatingSub] = useState(false);
-
-  // Upload Logic
+  // --- Data States ---
+  const [availableManagers, setAvailableManagers] = useState<{id: string, full_name: string}[]>([]);
+  const [availableTechs, setAvailableTechs] = useState<{id: string, full_name: string}[]>([]);
+  const [subcontractors, setSubcontractors] = useState<{id: string, name: string}[]>([]);
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
-  const [isCompressing, setIsCompressing] = useState(false);
 
-  const [formData, setFormData] = useState<ProjectData>({
-    title: '', category: 'Maintenance', type: 'Internal Team', status: 'Draft',
-    startDate: '', endDate: '', clientName: '', budget: '', locationName: '',
-    coordinates: { lat: 24.7136, lng: 46.6753 }, managers: [], equipment: [],
-    subcontractorId: '', contractType: 'Direct',
-    complianceItems: { 'التحقق من SLA': false, 'اعتماد خطة السلامة': false, 'تفويض الميزانية': false }
+  // --- Equipment Tags Logic ---
+  const [selectedEquipment, setSelectedEquipment] = useState<string[]>([]);
+  const [equipmentInput, setEquipmentInput] = useState('');
+
+  // --- Form State ---
+  const [formData, setFormData] = useState({
+    title: '',
+    contractType: 'Direct',
+    subcontractorId: '',
+    category: '',
+    customCategory: '',
+    startDate: '',
+    endDate: '',
+    budget: '',
+    contractValue: '',
+    workZones: [{ region: '', description: '' }],
+    entities: [{ type: 'أمانة / بلدية', name: '', contactPerson: '', phone: '' }],
+    managerId: '',
+    techIds: [] as string[],
+    projectNotes: ''
   });
 
-  // --- Fetch Initial Data ---
+  // Fetch Dropdown Data
   useEffect(() => {
-    const fetchSmartData = async () => {
-      setLoadingManagers(true);
-      try {
-        // Fetch Managers
-        const { data: pms } = await supabase.from('profiles').select('id, full_name, completion_rate').eq('role', 'project_manager');
-        const { data: activeProjects } = await supabase.from('projects').select('manager_name').eq('status', 'Active');
-        
-        if (pms) {
-          const enrichedManagers = pms.map(pm => ({
-            id: pm.id, full_name: pm.full_name,
-            completion_rate: pm.completion_rate || Math.floor(Math.random() * 20) + 80, 
-            active_projects: activeProjects?.filter(p => p.manager_name?.includes(pm.full_name)).length || 0
-          })).sort((a, b) => a.active_projects !== b.active_projects ? a.active_projects - b.active_projects : b.completion_rate - a.completion_rate);
-          setAvailableManagers(enrichedManagers);
-        }
-
-        // Fetch Subcontractors
-        const { data: subs } = await supabase.from('subcontractors').select('id, name');
-        if (subs) setSubcontractors(subs);
-
-      } catch (error) { console.error(error); } 
-      finally { setLoadingManagers(false); }
+    const fetchData = async () => {
+      const { data: pms } = await supabase.from('profiles').select('id, full_name').in('role', ['project_manager', 'super_admin']).eq('status', 'active');
+      const { data: techs } = await supabase.from('profiles').select('id, full_name').in('role', ['technician', 'engineer']).eq('status', 'active');
+      const { data: subs } = await supabase.from('subcontractors').select('id, name');
+      
+      if (pms) setAvailableManagers(pms);
+      if (techs) setAvailableTechs(techs);
+      if (subs) setSubcontractors(subs);
     };
-    fetchSmartData();
+    fetchData();
   }, []);
 
-  // --- Handlers ---
-  const handleNext = () => setCurrentStep(prev => Math.min(prev + 1, STEPS.length));
-  const handleBack = () => setCurrentStep(prev => Math.max(prev - 1, 1));
-
-  const toggleManager = (mgr: ManagerData) => {
-    setFormData(prev => {
-        const exists = prev.managers.find(m => m.id === mgr.id);
-        return { ...prev, managers: exists ? prev.managers.filter(m => m.id !== mgr.id) : [...prev.managers, mgr] };
-    });
+  // --- Dynamic Calculations ---
+  const calculateDaysLeft = () => {
+    if (!formData.endDate) return null;
+    const end = new Date(formData.endDate).getTime();
+    const start = formData.startDate ? new Date(formData.startDate).getTime() : new Date().getTime();
+    const diff = end - start;
+    const days = Math.ceil(diff / (1000 * 60 * 60 * 24));
+    return days > 0 ? days : 0;
   };
 
-  const toggleCompliance = (key: string) => setFormData(prev => ({ ...prev, complianceItems: { ...prev.complianceItems, [key]: !prev.complianceItems[key] } }));
+  const calculateProfit = () => {
+    const value = parseFloat(formData.contractValue) || 0;
+    const budget = parseFloat(formData.budget) || 0;
+    return value - budget;
+  };
 
+  // --- Multi-Fields Handlers (Entities) ---
+  const handleAddEntity = () => setFormData(prev => ({ ...prev, entities: [...prev.entities, { type: 'أمانة / بلدية', name: '', contactPerson: '', phone: '' }] }));
+  const handleRemoveEntity = (idx: number) => setFormData(prev => ({ ...prev, entities: prev.entities.filter((_, i) => i !== idx) }));
+  const handleEntityChange = (idx: number, field: string, value: string) => {
+      const newEntities = [...formData.entities];
+      newEntities[idx] = { ...newEntities[idx], [field]: value };
+      setFormData(prev => ({ ...prev, entities: newEntities }));
+  };
+
+  // --- Multi-Fields Handlers (Work Zones) ---
+  const handleAddZone = () => setFormData(prev => ({ ...prev, workZones: [...prev.workZones, { region: '', description: '' }] }));
+  const handleRemoveZone = (idx: number) => setFormData(prev => ({ ...prev, workZones: prev.workZones.filter((_, i) => i !== idx) }));
+  const handleZoneChange = (idx: number, field: string, value: string) => {
+      const newZones = [...formData.workZones];
+      newZones[idx] = { ...newZones[idx], [field]: value };
+      setFormData(prev => ({ ...prev, workZones: newZones }));
+  };
+
+  // --- Equipment Handlers ---
+  const addEquipment = (val: string) => {
+      const item = val.trim();
+      if (item && !selectedEquipment.includes(item)) {
+          setSelectedEquipment([...selectedEquipment, item]);
+      }
+      setEquipmentInput('');
+  };
+
+  const removeEquipment = (item: string) => {
+      setSelectedEquipment(selectedEquipment.filter(e => e !== item));
+  };
+
+  const handleEquipmentKeyDown = (e: React.KeyboardEvent) => {
+      if (e.key === 'Enter') {
+          e.preventDefault();
+          addEquipment(equipmentInput);
+      }
+  };
+
+  // --- Techs & Files Handlers ---
+  const toggleTech = (id: string) => {
+      setFormData(prev => ({
+          ...prev, 
+          techIds: prev.techIds.includes(id) ? prev.techIds.filter(t => t !== id) : [...prev.techIds, id]
+      }));
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+        setUploadedFiles(prev => [...prev, ...Array.from(e.target.files as FileList)]);
+    }
+  };
+
+  const removeFile = (idx: number) => {
+      setUploadedFiles(prev => prev.filter((_, i) => i !== idx));
+  };
+
+  // 🚀 --- Subcontractor Routing Handler ---
   const handleSubcontractorChange = (value: string) => {
       if (value === 'NEW') {
-          setIsNewSubModalOpen(true);
+          // توجيه لصفحة إنشاء المقاول الجديدة
+          router.push('/dashboard/subcontractors/create'); 
       } else {
           setFormData(prev => ({ 
               ...prev, 
               subcontractorId: value, 
-              contractType: value ? 'Subcontract' : 'Direct' // 👈 التصنيف التلقائي
+              contractType: value ? 'Subcontract' : 'Direct'
           }));
       }
   };
 
-  const createNewSubcontractor = async () => {
-      if (!newSubName.trim()) return;
-      setIsCreatingSub(true);
-      try {
-          const { data, error } = await supabase.from('subcontractors').insert({ name: newSubName }).select().single();
-          if (error) throw error;
-          
-          setSubcontractors(prev => [...prev, data]);
-          setFormData(prev => ({ ...prev, subcontractorId: data.id, contractType: 'Subcontract' }));
-          setIsNewSubModalOpen(false);
-          setNewSubName('');
-      } catch (error) { alert('Failed to create subcontractor'); }
-      finally { setIsCreatingSub(false); }
-  };
-
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!e.target.files?.length) return;
-    setIsCompressing(true);
-    const processedFiles: File[] = [];
-    for (const file of Array.from(e.target.files)) {
-        if (file.type.startsWith('image/')) {
-            try {
-                const compressedBlob = await imageCompression(file, { maxSizeMB: 1, maxWidthOrHeight: 1920, useWebWorker: true });
-                processedFiles.push(new File([compressedBlob], file.name, { type: file.type }));
-            } catch { processedFiles.push(file); }
-        } else processedFiles.push(file);
+  // --- Submit ---
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.title || !formData.category || !formData.managerId) {
+        alert(isRTL ? 'يرجى إكمال البيانات الأساسية (الاسم، التصنيف، مدير المشروع)' : 'Please fill basic info');
+        return;
     }
-    setUploadedFiles(prev => [...prev, ...processedFiles]);
-    setIsCompressing(false);
-    if (fileInputRef.current) fileInputRef.current.value = ''; 
-  };
-
-  const triggerAiSuggestion = async () => {
-    if (!formData.title) return alert(isRTL ? 'يرجى كتابة العنوان أولاً' : 'Title required');
-    setIsAiLoading(true);
-    try {
-      const response = await fetch('/api/ai-assistant', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'generate-project', lang, data: { title: formData.title } })
-      });
-      const data = await response.json();
-      if (data.result) setFormData(prev => ({ ...prev, budget: data.result.budget || prev.budget, equipment: data.result.equipment || prev.equipment }));
-    } catch (error) { console.error(error); } 
-    finally { setIsAiLoading(false); }
-  };
-
-  const handleCreateProject = async () => {
     setIsSubmitting(true);
+
     try {
         const { data: { user } } = await supabase.auth.getUser();
-        if (!user) throw new Error('Not authenticated');
+        if (!user) throw new Error('Auth Error');
 
+        // 1. Upload Files
         let fileUrls: string[] = [];
         if (uploadedFiles.length > 0) {
+            setUploadingFiles(true);
             for (const file of uploadedFiles) {
-                const fileName = `projects/${user.id}/${Date.now()}_${Math.random().toString(36).substring(7)}.${file.name.split('.').pop()}`;
+                const fileName = `projects/${Date.now()}_${file.name}`;
                 const { error: uploadError } = await supabase.storage.from('tech-media').upload(fileName, file);
-                if (uploadError) throw uploadError;
-                const { data } = supabase.storage.from('tech-media').getPublicUrl(fileName);
-                if (data.publicUrl) fileUrls.push(data.publicUrl);
+                if (!uploadError) {
+                    const { data } = supabase.storage.from('tech-media').getPublicUrl(fileName);
+                    fileUrls.push(data.publicUrl);
+                }
             }
+            setUploadingFiles(false);
         }
 
-        const managerNamesString = formData.managers.map(m => m.full_name).join(', ');
+        // 2. Insert Project
+        const finalCategory = formData.category === 'أخرى' ? formData.customCategory : formData.category;
+        const requiredToolsText = selectedEquipment.join('، ');
+        
+        const { data: projectData, error: projError } = await supabase.from('projects').insert({
+            created_by: user.id,
+            title: formData.title,
+            category: finalCategory,
+            contract_type: formData.contractType,
+            subcontractor_id: formData.subcontractorId || null,
+            start_date: formData.startDate || null,
+            end_date: formData.endDate || null,
+            budget: parseFloat(formData.budget) || 0,
+            contract_value: parseFloat(formData.contractValue) || 0,
+            expected_profit: calculateProfit(),
+            work_zones: formData.workZones,
+            client_entities: formData.entities,
+            manager_id: formData.managerId,
+            assigned_techs: formData.techIds,
+            required_tools: requiredToolsText,
+            project_notes: formData.projectNotes,
+            contract_urls: fileUrls,
+            status: 'Active'
+        }).select().single();
 
-        const { error } = await supabase.from('projects').insert({
-            created_by: user.id, title: formData.title, category: formData.category, execution_type: formData.type, status: 'Active', 
-            start_date: formData.startDate || null, end_date: formData.endDate || null, budget: formData.budget ? parseFloat(formData.budget) : 0,
-            location_name: formData.locationName, location_lat: formData.coordinates.lat, location_lng: formData.coordinates.lng,
-            manager_name: managerNamesString, equipment: formData.equipment, compliance_checklist: formData.complianceItems, contract_urls: fileUrls,
-            subcontractor_id: formData.subcontractorId || null, contract_type: formData.contractType // 👈 التخزين
-        });
+        if (projError) throw projError;
 
-        if (error) throw error;
-        alert(isRTL ? 'تم إنشاء المشروع بنجاح!' : 'Project Created Successfully!');
-        router.push('/dashboard');
-    } catch (error: any) { alert(isRTL ? 'حدث خطأ أثناء الحفظ' : 'Error saving project'); } 
-    finally { setIsSubmitting(false); }
+        // 3. Assign Techs
+        if (formData.techIds.length > 0 && projectData) {
+            const assignments = formData.techIds.map(techId => ({
+                project_id: projectData.id,
+                tech_id: techId,
+                assigned_by: user.id,
+                status: 'Pending'
+            }));
+            await supabase.from('task_assignments').insert(assignments);
+        }
+
+        alert(isRTL ? 'تم تسجيل المشروع بنجاح!' : 'Project registered successfully!');
+        router.push('/dashboard/projects/list');
+
+    } catch (error: any) {
+        console.error(error);
+        alert(isRTL ? 'حدث خطأ أثناء الحفظ: ' + error.message : 'Error saving: ' + error.message);
+    } finally {
+        setIsSubmitting(false);
+    }
   };
 
-  const glassCard = isDark ? "bg-slate-900/60 backdrop-blur-xl border border-slate-700 shadow-2xl shadow-black/20" : "bg-white/70 backdrop-blur-xl border border-white/60 shadow-xl shadow-slate-200/50";
+  // --- UI Helpers ---
+  const glassCard = isDark ? "bg-slate-900 border border-slate-800" : "bg-white border border-slate-200";
+  const inputBg = isDark ? "bg-slate-950 border-slate-800 text-white" : "bg-slate-50 border-slate-200 text-slate-900";
   const textMain = isDark ? "text-white" : "text-slate-900";
   const textSub = isDark ? "text-slate-400" : "text-slate-500";
-  const inputBg = isDark ? "bg-slate-800/50 border-slate-600 text-white focus:border-blue-500" : "bg-white border-slate-200 text-slate-800 focus:border-blue-600";
 
   return (
-    <div className={`min-h-screen font-sans ${isDark ? 'bg-slate-950' : 'bg-slate-50'} ${isRTL ? 'dir-rtl' : 'dir-ltr'}`} dir={isRTL ? 'rtl' : 'ltr'}>
+    <div className={`min-h-screen font-sans pb-24 ${isDark ? 'bg-slate-950' : 'bg-slate-50'} ${isRTL ? 'dir-rtl' : 'dir-ltr'}`} dir={isRTL ? 'rtl' : 'ltr'}>
       
-      {/* Background Decor */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden">
-         <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-blue-600/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
-         <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-purple-600/10 rounded-full blur-3xl translate-y-1/2 -translate-x-1/2"></div>
-      </div>
-
-      <header className={`sticky top-0 z-40 px-6 py-4 transition-all border-b ${isDark ? 'bg-slate-900/80 border-slate-800' : 'bg-white/80 border-slate-200'} backdrop-blur-md`}>
-        <div className="max-w-7xl mx-auto flex justify-between items-center">
+      {/* Header */}
+      <header className={`sticky top-0 z-40 px-6 py-5 border-b backdrop-blur-xl ${isDark ? 'bg-slate-950/80 border-slate-800' : 'bg-white/80 border-slate-200'}`}>
+        <div className="max-w-5xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <button onClick={() => router.back()} className={`p-2.5 rounded-full transition-transform hover:scale-105 active:scale-95 ${isDark ? 'hover:bg-slate-800 text-slate-300' : 'hover:bg-slate-100 text-slate-600'}`}>
+            <button onClick={() => router.back()} className={`p-2.5 rounded-full transition ${isDark ? 'hover:bg-slate-800 text-slate-400' : 'hover:bg-slate-100 text-slate-600'}`}>
               {isRTL ? <ArrowRight size={22} /> : <ArrowLeft size={22} />}
             </button>
             <div>
-              <h1 className={`text-xl font-black flex items-center gap-2 tracking-tight ${textMain}`}>
-                <Layers className="text-blue-600" strokeWidth={2.5} /> {isRTL ? 'تأسيس مشروع جديد' : 'New Project Setup'}
+              <h1 className={`text-2xl font-black flex items-center gap-3 ${textMain}`}>
+                <Briefcase className="text-blue-600" /> {isRTL ? 'تأسيس مشروع جديد' : 'Setup New Project'}
               </h1>
-              <p className={`text-xs font-medium mt-0.5 flex items-center gap-2 ${textSub}`}>
-                Enterprise Workspace <span className="w-1 h-1 rounded-full bg-slate-400"></span> <span className="text-blue-500 font-bold">{formData.status}</span>
-              </p>
+              <p className={`text-sm font-medium mt-1 ${textSub}`}>{isRTL ? 'تسجيل تفاصيل العقد، النطاق، والمالية في مكان واحد.' : 'Register contract, scope, and financials.'}</p>
             </div>
           </div>
+          <button type="button" disabled={isSubmitting} onClick={handleSubmit} className="px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-lg shadow-blue-600/20 transition flex items-center gap-2 active:scale-95 disabled:opacity-50">
+              {isSubmitting ? <Loader2 className="animate-spin" size={18}/> : <CheckCircle2 size={18}/>}
+              {isRTL ? 'حفظ واعتماد المشروع' : 'Save Project'}
+          </button>
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto p-6 grid grid-cols-1 lg:grid-cols-12 gap-8 mt-4 relative z-10">
+      <main className="max-w-5xl mx-auto p-6 mt-4 space-y-8">
         
-        {/* Sidebar */}
-        <aside className="lg:col-span-3 hidden lg:block space-y-6 sticky top-28 h-fit">
-          <nav className="space-y-4 relative">
-            <div className={`absolute top-6 bottom-6 w-0.5 ${isDark ? 'bg-slate-800' : 'bg-slate-200'} ${isRTL ? 'right-[22px]' : 'left-[22px]'} -z-10`}></div>
-            {STEPS.map((step) => {
-              const isActive = step.id === currentStep;
-              const isCompleted = step.id < currentStep;
-              return (
-                <div key={step.id} onClick={() => setCurrentStep(step.id)} className={`flex items-center gap-4 p-3 rounded-2xl cursor-pointer transition-all duration-300 group ${isActive ? `${glassCard} translate-x-2 rtl:-translate-x-2` : 'hover:bg-white/10'}`}>
-                  <div className={`w-11 h-11 rounded-full flex items-center justify-center shrink-0 border-[3px] transition-all duration-300 ${isActive ? 'bg-blue-600 border-blue-500/30 text-white shadow-lg shadow-blue-600/30 scale-110' : isCompleted ? 'bg-emerald-500 border-emerald-500/30 text-white' : `${isDark ? 'bg-slate-800 border-slate-700 text-slate-500' : 'bg-white border-slate-200 text-slate-400'} group-hover:border-slate-400`}`}>
-                    {isCompleted ? <CheckCircle2 size={18} /> : <step.icon size={18} />}
-                  </div>
-                  <div>
-                    <span className={`block text-sm font-bold transition-colors ${isActive ? textMain : textSub}`}>{isRTL ? step.label.ar : step.label.en}</span>
-                    <span className="text-[10px] text-slate-400 opacity-80">{isRTL ? step.desc.ar : step.desc.en}</span>
-                  </div>
+        {/* Section 1: Basic Info */}
+        <section className={`p-8 rounded-[2rem] shadow-sm ${glassCard}`}>
+            <h3 className={`text-lg font-black flex items-center gap-2 mb-6 pb-4 border-b ${isDark ? 'border-slate-800 text-white' : 'border-slate-100 text-slate-900'}`}>
+                <FileText className="text-blue-500" size={20}/> {isRTL ? 'البيانات الأساسية للعقد' : 'Basic Contract Info'}
+            </h3>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="md:col-span-2">
+                    <label className={`text-xs font-bold uppercase tracking-wider mb-2 block ${textSub}`}>{isRTL ? 'اسم المشروع / العقد *' : 'Project Name *'}</label>
+                    <input type="text" required placeholder={isRTL ? 'مثال: مشروع صيانة وتأهيل طرق الأمانة...' : 'e.g. Road Maintenance Project'} value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} className={`w-full p-4 rounded-xl border outline-none focus:border-blue-500 font-bold text-lg transition ${inputBg}`} />
                 </div>
-              );
-            })}
-          </nav>
-          
-          <div className="p-1 rounded-3xl bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500">
-             <div className={`${isDark ? 'bg-slate-900' : 'bg-white'} rounded-[1.3rem] p-5 relative overflow-hidden`}>
-                <div className="flex items-center gap-3 mb-3">
-                    <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg text-purple-600 dark:text-purple-400"><Sparkles size={18}/></div>
-                    <div className={`font-bold text-sm ${textMain}`}>AI Assistant</div>
-                </div>
-                <button onClick={triggerAiSuggestion} disabled={isAiLoading} className="w-full py-3 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-xl text-xs font-bold shadow-lg flex items-center justify-center gap-2 hover:opacity-90 transition-opacity">
-                    {isAiLoading ? <Loader2 className="animate-spin" size={14}/> : <Cpu size={14}/>}
-                    {isRTL ? 'توليد البيانات تلقائياً' : 'Auto-Generate Data'}
-                </button>
-             </div>
-          </div>
-        </aside>
 
-        {/* Form Content */}
-        <div className="lg:col-span-9 space-y-6">
-          <AnimatePresence mode='wait'>
-            <motion.div key={currentStep} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.3 }} className={`p-8 rounded-[2.5rem] ${glassCard} min-h-[500px] flex flex-col justify-between`}>
-                <div className="space-y-8">
-                    <div className="flex items-center justify-between pb-6 border-b border-slate-200/10">
-                        <div>
-                            <h2 className={`text-2xl font-black ${textMain}`}>{isRTL ? STEPS[currentStep-1].label.ar : STEPS[currentStep-1].label.en}</h2>
-                            <p className={`text-sm ${textSub}`}>{isRTL ? STEPS[currentStep-1].desc.ar : STEPS[currentStep-1].desc.en}</p>
+                <div>
+                    <label className={`text-xs font-bold uppercase tracking-wider mb-2 block ${textSub}`}>{isRTL ? 'ارتباط المشروع' : 'Contract Type'}</label>
+                    <div className="flex gap-4">
+                        <label className={`flex-1 flex items-center gap-3 p-4 rounded-xl border cursor-pointer transition ${formData.contractType === 'Direct' ? 'bg-blue-50 border-blue-500 dark:bg-blue-900/20 dark:border-blue-500' : inputBg}`}>
+                            <input type="radio" name="ctype" checked={formData.contractType === 'Direct'} onChange={() => setFormData({...formData, contractType: 'Direct', subcontractorId: ''})} className="hidden" />
+                            <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${formData.contractType === 'Direct' ? 'border-blue-600' : 'border-slate-300'}`}>{formData.contractType === 'Direct' && <div className="w-2.5 h-2.5 bg-blue-600 rounded-full"></div>}</div>
+                            <span className="font-bold text-sm">{isRTL ? 'عقد مباشر للشركة' : 'Direct Contract'}</span>
+                        </label>
+                        <label className={`flex-1 flex items-center gap-3 p-4 rounded-xl border cursor-pointer transition ${formData.contractType === 'Subcontract' ? 'bg-amber-50 border-amber-500 dark:bg-amber-900/20 dark:border-amber-500' : inputBg}`}>
+                            <input type="radio" name="ctype" checked={formData.contractType === 'Subcontract'} onChange={() => setFormData({...formData, contractType: 'Subcontract'})} className="hidden" />
+                            <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${formData.contractType === 'Subcontract' ? 'border-amber-600' : 'border-slate-300'}`}>{formData.contractType === 'Subcontract' && <div className="w-2.5 h-2.5 bg-amber-600 rounded-full"></div>}</div>
+                            <span className="font-bold text-sm">{isRTL ? 'عقد بالباطن' : 'Subcontractor'}</span>
+                        </label>
+                    </div>
+                </div>
+
+                {formData.contractType === 'Subcontract' && (
+                    <div className="animate-in fade-in slide-in-from-top-2">
+                        <label className={`text-xs font-bold uppercase tracking-wider mb-2 block ${textSub}`}>{isRTL ? 'اختر المقاول الأساسي' : 'Select Subcontractor'}</label>
+                        
+                        {/* 🚀 القائمة المحدثة بالخيار الجديد والتوجيه */}
+                        <select 
+                            value={formData.subcontractorId} 
+                            onChange={e => handleSubcontractorChange(e.target.value)} 
+                            className={`w-full p-4 rounded-xl border outline-none focus:border-amber-500 font-bold text-sm cursor-pointer ${inputBg}`}
+                        >
+                            <option value="">{isRTL ? '-- اختر المقاول --' : '-- Select --'}</option>
+                            <optgroup label={isRTL ? "المقاولين المسجلين" : "Registered Subcontractors"}>
+                                {subcontractors.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                            </optgroup>
+                            <optgroup label="---------------------">
+                                <option value="NEW" className="text-blue-600 font-black">{isRTL ? '+ إضافة مقاول رئيسي جديد' : '+ Add New Subcontractor'}</option>
+                            </optgroup>
+                        </select>
+                    </div>
+                )}
+
+                <div className={formData.contractType === 'Direct' ? 'md:col-span-1' : 'md:col-span-2'}>
+                    <label className={`text-xs font-bold uppercase tracking-wider mb-2 block ${textSub}`}>{isRTL ? 'نوع أعمال المشروع *' : 'Project Category *'}</label>
+                    <select value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})} className={`w-full p-4 rounded-xl border outline-none focus:border-blue-500 font-bold text-sm cursor-pointer ${inputBg}`}>
+                        <option value="">{isRTL ? '-- اختر النوع --' : '-- Select Category --'}</option>
+                        {PROJECT_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                </div>
+
+                {formData.category === 'أخرى' && (
+                    <div className="md:col-span-2 animate-in fade-in">
+                        <label className={`text-xs font-bold uppercase tracking-wider mb-2 block ${textSub}`}>{isRTL ? 'اكتب نوع المشروع المخصص' : 'Specify Category'}</label>
+                        <input type="text" required value={formData.customCategory} onChange={e => setFormData({...formData, customCategory: e.target.value})} className={`w-full p-4 rounded-xl border outline-none focus:border-blue-500 font-bold text-sm ${inputBg}`} />
+                    </div>
+                )}
+            </div>
+        </section>
+
+        {/* Section 2: Financials & Timeline */}
+        <section className={`p-8 rounded-[2rem] shadow-sm ${glassCard}`}>
+            <h3 className={`text-lg font-black flex items-center gap-2 mb-6 pb-4 border-b ${isDark ? 'border-slate-800 text-white' : 'border-slate-100 text-slate-900'}`}>
+                <Calendar className="text-emerald-500" size={20}/> {isRTL ? 'المدة والميزانية' : 'Timeline & Financials'}
+            </h3>
+
+            <div className={`mb-8 p-6 rounded-2xl border flex flex-col md:flex-row divide-y md:divide-y-0 md:divide-x rtl:divide-x-reverse ${isDark ? 'bg-slate-900/50 border-slate-700 divide-slate-700' : 'bg-slate-50 border-slate-200 divide-slate-200'}`}>
+                <div className="flex-1 pb-4 md:pb-0 md:px-6 text-center">
+                    <div className={`text-xs font-bold mb-1 ${textSub}`}><Clock className="inline w-4 h-4 mr-1"/> {isRTL ? 'مدة العقد المتبقية' : 'Days Left'}</div>
+                    <div className={`text-3xl font-black ${calculateDaysLeft() === null ? 'text-slate-300' : calculateDaysLeft()! < 30 ? 'text-red-500' : 'text-blue-600'}`}>
+                        {calculateDaysLeft() === null ? '-' : calculateDaysLeft()!} <span className="text-sm font-medium">{isRTL ? 'يوم' : 'Days'}</span>
+                    </div>
+                </div>
+                <div className="flex-1 pt-4 md:pt-0 md:px-6 text-center">
+                    <div className={`text-xs font-bold mb-1 ${textSub}`}><TrendingUp className="inline w-4 h-4 mr-1"/> {isRTL ? 'الربح المتوقع' : 'Expected Profit'}</div>
+                    <div className={`text-3xl font-black ${calculateProfit() > 0 ? 'text-emerald-500' : calculateProfit() < 0 ? 'text-red-500' : 'text-slate-300'}`}>
+                        {calculateProfit() > 0 ? '+' : ''}{calculateProfit().toLocaleString()} <span className="text-sm font-medium">SAR</span>
+                    </div>
+                </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                    <label className={`text-xs font-bold uppercase tracking-wider mb-2 block ${textSub}`}>{isRTL ? 'تاريخ البدء' : 'Start Date'}</label>
+                    <input type="date" value={formData.startDate} onChange={e => setFormData({...formData, startDate: e.target.value})} className={`w-full p-4 rounded-xl border outline-none focus:border-blue-500 font-bold text-sm ${inputBg}`} />
+                </div>
+                <div>
+                    <label className={`text-xs font-bold uppercase tracking-wider mb-2 block ${textSub}`}>{isRTL ? 'تاريخ الانتهاء' : 'End Date'}</label>
+                    <input type="date" value={formData.endDate} onChange={e => setFormData({...formData, endDate: e.target.value})} className={`w-full p-4 rounded-xl border outline-none focus:border-blue-500 font-bold text-sm ${inputBg}`} />
+                </div>
+                <div>
+                    <label className={`text-xs font-bold uppercase tracking-wider mb-2 block ${textSub}`}>{isRTL ? 'قيمة العقد الكلية (الإيراد)' : 'Total Contract Value'}</label>
+                    <div className="relative">
+                        <DollarSign className={`absolute top-4 ${isRTL ? 'left-4' : 'right-4'} text-slate-400`} size={20}/>
+                        <input type="number" value={formData.contractValue} onChange={e => setFormData({...formData, contractValue: e.target.value})} placeholder="0.00" className={`w-full p-4 rounded-xl border outline-none focus:border-emerald-500 font-bold text-lg ${inputBg} ${isRTL ? 'pl-12' : 'pr-12'}`} />
+                    </div>
+                </div>
+                <div>
+                    <label className={`text-xs font-bold uppercase tracking-wider mb-2 block ${textSub}`}>{isRTL ? 'الميزانية المعتمدة (التكلفة)' : 'Approved Budget (Cost)'}</label>
+                    <div className="relative">
+                        <DollarSign className={`absolute top-4 ${isRTL ? 'left-4' : 'right-4'} text-slate-400`} size={20}/>
+                        <input type="number" value={formData.budget} onChange={e => setFormData({...formData, budget: e.target.value})} placeholder="0.00" className={`w-full p-4 rounded-xl border outline-none focus:border-red-500 font-bold text-lg ${inputBg} ${isRTL ? 'pl-12' : 'pr-12'}`} />
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        {/* Section 3: Entities & Clients */}
+        <section className={`p-8 rounded-[2rem] shadow-sm ${glassCard}`}>
+            <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-100 dark:border-slate-800">
+                <h3 className={`text-lg font-black flex items-center gap-2 ${textMain}`}>
+                    <Building2 className="text-purple-500" size={20}/> {isRTL ? 'الجهات التابع لها العقد' : 'Client Entities'}
+                </h3>
+                <button type="button" onClick={handleAddEntity} className="px-4 py-2 bg-purple-50 hover:bg-purple-100 text-purple-700 dark:bg-purple-500/10 dark:hover:bg-purple-500/20 dark:text-purple-400 rounded-lg text-xs font-bold transition flex items-center gap-1">
+                    <Plus size={14}/> {isRTL ? 'إضافة جهة أخرى' : 'Add Entity'}
+                </button>
+            </div>
+
+            <div className="space-y-4">
+                {formData.entities.map((entity, idx) => (
+                    <div key={idx} className={`p-6 rounded-2xl border ${isDark ? 'bg-slate-800/30 border-slate-700' : 'bg-slate-50 border-slate-200'}`}>
+                        <div className="flex justify-between items-center mb-4 pb-3 border-b border-slate-200/50 dark:border-slate-700/50">
+                           <span className="text-xs font-bold text-slate-500">{isRTL ? `جهة ارتباط #${idx + 1}` : `Entity #${idx + 1}`}</span>
+                           {formData.entities.length > 1 && (
+                               <button type="button" onClick={() => handleRemoveEntity(idx)} className="text-xs font-bold text-red-500 hover:bg-red-50 px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition">
+                                   <X size={14}/> {isRTL ? 'إزالة هذه الجهة' : 'Remove'}
+                               </button>
+                           )}
                         </div>
-                        <div className={`text-4xl font-black opacity-5 ${textMain}`}>0{currentStep}</div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label className={`text-[10px] font-bold uppercase mb-1 block ${textSub}`}>{isRTL ? 'نوع الجهة' : 'Entity Type'}</label>
+                                <select value={entity.type} onChange={(e) => handleEntityChange(idx, 'type', e.target.value)} className={`w-full p-3 rounded-xl border text-sm font-bold cursor-pointer ${inputBg}`}>
+                                    {ENTITY_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                                </select>
+                            </div>
+                            <div>
+                                <label className={`text-[10px] font-bold uppercase mb-1 block ${textSub}`}>{isRTL ? 'اسم الجهة / الفرع' : 'Entity / Branch Name'}</label>
+                                <input type="text" placeholder={isRTL ? 'مثال: بلدية شمال الرياض' : 'e.g. North Riyadh Municipality'} value={entity.name} onChange={(e) => handleEntityChange(idx, 'name', e.target.value)} className={`w-full p-3 rounded-xl border text-sm font-bold ${inputBg}`} />
+                            </div>
+                            <div>
+                                <label className={`text-[10px] font-bold uppercase mb-1 block ${textSub}`}>{isRTL ? 'الشخص المسؤول (المهندس/المشرف)' : 'Contact Person'}</label>
+                                <div className="relative">
+                                    <User className="absolute top-3.5 rtl:right-3 ltr:left-3 text-slate-400" size={16}/>
+                                    <input type="text" placeholder={isRTL ? 'اسم المسؤول أو منصبه' : 'Name or Title'} value={entity.contactPerson} onChange={(e) => handleEntityChange(idx, 'contactPerson', e.target.value)} className={`w-full p-3 rounded-xl border text-sm font-bold rtl:pr-10 ltr:pl-10 ${inputBg}`} />
+                                </div>
+                            </div>
+                            <div>
+                                <label className={`text-[10px] font-bold uppercase mb-1 block ${textSub}`}>{isRTL ? 'رقم التواصل' : 'Phone Number'}</label>
+                                <div className="relative">
+                                    <Phone className="absolute top-3.5 rtl:right-3 ltr:left-3 text-slate-400" size={16}/>
+                                    <input type="tel" dir="ltr" placeholder="05xxxxxxxx" value={entity.phone} onChange={(e) => handleEntityChange(idx, 'phone', e.target.value)} className={`w-full p-3 rounded-xl border text-sm font-bold rtl:pr-10 ltr:pl-10 rtl:text-right ${inputBg}`} />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </section>
+
+        {/* Section 4: Work Zones */}
+        <section className={`p-8 rounded-[2rem] shadow-sm ${glassCard}`}>
+            <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-100 dark:border-slate-800">
+                <h3 className={`text-lg font-black flex items-center gap-2 ${textMain}`}>
+                    <MapPin className="text-amber-500" size={20}/> {isRTL ? 'نطاقات ومواقع العمل' : 'Work Zones'}
+                </h3>
+                <button type="button" onClick={handleAddZone} className="px-4 py-2 bg-amber-50 hover:bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:hover:bg-amber-500/20 dark:text-amber-400 rounded-lg text-xs font-bold transition flex items-center gap-1">
+                    <Plus size={14}/> {isRTL ? 'إضافة نطاق عمل' : 'Add Zone'}
+                </button>
+            </div>
+
+            <div className="space-y-4">
+                {formData.workZones.map((zone, idx) => (
+                    <div key={idx} className={`p-6 rounded-2xl border ${isDark ? 'bg-slate-800/30 border-slate-700' : 'bg-slate-50 border-slate-200'}`}>
+                        <div className="flex justify-between items-center mb-4 pb-3 border-b border-slate-200/50 dark:border-slate-700/50">
+                           <span className="text-xs font-bold text-slate-500">{isRTL ? `نطاق العمل #${idx + 1}` : `Zone #${idx + 1}`}</span>
+                           {formData.workZones.length > 1 && (
+                               <button type="button" onClick={() => handleRemoveZone(idx)} className="text-xs font-bold text-red-500 hover:bg-red-50 px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition">
+                                   <X size={14}/> {isRTL ? 'إزالة هذا النطاق' : 'Remove'}
+                               </button>
+                           )}
+                        </div>
+
+                        <div className="flex flex-col md:flex-row gap-4 items-start md:items-center">
+                            <div className="w-full md:w-1/3">
+                                <label className={`text-[10px] font-bold uppercase mb-1 block ${textSub}`}>{isRTL ? 'المنطقة / المدينة' : 'Region / City'}</label>
+                                <input type="text" placeholder={isRTL ? 'مثال: المنطقة الجنوبية' : 'e.g. Southern Region'} value={zone.region} onChange={(e) => handleZoneChange(idx, 'region', e.target.value)} className={`w-full p-3 rounded-xl border text-sm font-bold ${inputBg}`} />
+                            </div>
+                            <div className="w-full md:w-2/3">
+                                <label className={`text-[10px] font-bold uppercase mb-1 block ${textSub}`}>{isRTL ? 'وصف الموقع الدقيق ومجال التغطية' : 'Location Details'}</label>
+                                <input type="text" placeholder={isRTL ? 'شرح لمكان تنفيذ الأعمال في هذا النطاق...' : 'Specific details...'} value={zone.description} onChange={(e) => handleZoneChange(idx, 'description', e.target.value)} className={`w-full p-3 rounded-xl border text-sm font-bold ${inputBg}`} />
+                            </div>
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </section>
+
+        {/* Section 5: Team & Resources */}
+        <section className={`p-8 rounded-[2rem] shadow-sm ${glassCard}`}>
+            <h3 className={`text-lg font-black flex items-center gap-2 mb-6 pb-4 border-b ${isDark ? 'border-slate-800 text-white' : 'border-slate-100 text-slate-900'}`}>
+                <Users className="text-indigo-500" size={20}/> {isRTL ? 'فريق العمل والموارد' : 'Team & Resources'}
+            </h3>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                {/* Manager */}
+                <div>
+                    <label className={`text-xs font-bold uppercase tracking-wider mb-2 block ${textSub}`}>{isRTL ? 'مدير المشروع المسؤول *' : 'Project Manager *'}</label>
+                    <select required value={formData.managerId} onChange={e => setFormData({...formData, managerId: e.target.value})} className={`w-full p-4 rounded-xl border outline-none focus:border-blue-500 font-bold text-sm cursor-pointer ${inputBg}`}>
+                        <option value="">{isRTL ? '-- اختر مدير المشروع --' : '-- Select Manager --'}</option>
+                        {availableManagers.map(m => <option key={m.id} value={m.id}>{m.full_name}</option>)}
+                    </select>
+                    <p className="text-[10px] mt-2 text-amber-600 font-bold flex items-center gap-1"><Briefcase size={12}/> {isRTL ? 'ملاحظة: المدير سيتمكن من التحكم بالعقد وطلب الفنيين.' : 'Manager handles the contract.'}</p>
+                </div>
+
+                {/* Technicians */}
+                <div>
+                    <label className={`text-xs font-bold uppercase tracking-wider mb-2 block ${textSub}`}>{isRTL ? 'إسناد مبدئي للفنيين (اختياري)' : 'Key Technicians (Optional)'}</label>
+                    <div className={`p-4 rounded-xl border max-h-[150px] overflow-y-auto custom-scrollbar ${inputBg}`}>
+                        {availableTechs.map(tech => (
+                            <label key={tech.id} className="flex items-center gap-3 p-2 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg cursor-pointer transition">
+                                <input type="checkbox" className="w-4 h-4 rounded text-blue-600 border-slate-300" checked={formData.techIds.includes(tech.id)} onChange={() => toggleTech(tech.id)} />
+                                <span className="text-sm font-bold">{tech.full_name}</span>
+                            </label>
+                        ))}
+                        {availableTechs.length === 0 && <span className="text-xs text-slate-400">{isRTL ? 'لا يوجد فنيين متاحين حالياً' : 'No available technicians'}</span>}
+                    </div>
+                </div>
+
+                {/* Smart Equipment & Tools Input */}
+                <div className="md:col-span-2 space-y-4 pt-4 border-t border-dashed border-slate-200/50">
+                    <label className={`text-xs font-bold uppercase tracking-wider mb-2 block ${textSub}`}>{isRTL ? 'المعدات والأدوات المطلوبة للعقد' : 'Required Equipment & Tools'}</label>
+                    
+                    <div className="flex gap-3">
+                        <div className="relative flex-1">
+                            <Wrench className="absolute top-4 rtl:right-4 ltr:left-4 text-slate-400" size={20}/>
+                            <input 
+                                type="text" 
+                                value={equipmentInput} 
+                                onChange={(e) => setEquipmentInput(e.target.value)} 
+                                onKeyDown={handleEquipmentKeyDown}
+                                placeholder={isRTL ? 'اكتب اسم المعدة / الأداة واضغط Enter للإضافة...' : 'Type tool and press Enter...'} 
+                                className={`w-full p-4 rounded-xl border outline-none focus:border-blue-500 font-bold text-sm rtl:pr-12 ltr:pl-12 ${inputBg}`} 
+                            />
+                        </div>
+                        <button type="button" onClick={() => addEquipment(equipmentInput)} className="px-6 py-4 bg-slate-800 hover:bg-slate-900 text-white text-sm font-bold rounded-xl transition">
+                            {isRTL ? 'إضافة' : 'Add'}
+                        </button>
                     </div>
 
-                    {/* Step 1: Identity */}
-                    {currentStep === 1 && (
-                        <div className="space-y-6">
-                            <ModernInput label={isRTL ? 'عنوان المشروع' : 'Project Title'} value={formData.title} onChange={(v: string) => setFormData({...formData, title: v})} isDark={isDark} inputBg={inputBg} icon={FileText} autoFocus />
-                            
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <ModernSelect label={isRTL ? 'التصنيف' : 'Category'} value={formData.category} options={['Maintenance', 'Cable Testing', 'Infrastructure', 'Tech Support', 'Emergency']} onChange={(v: string) => setFormData({...formData, category: v as ProjectCategory})} isDark={isDark} inputBg={inputBg} />
-                                <ModernSelect label={isRTL ? 'نوع التنفيذ' : 'Execution'} value={formData.type} options={['Internal Team', 'Outsourced', 'Hybrid']} onChange={(v: string) => setFormData({...formData, type: v})} isDark={isDark} inputBg={inputBg} />
-                            </div>
-
-                            {/* 🚀 Contract Mapping (New) */}
-                            <div className={`p-5 rounded-2xl border ${isDark ? 'bg-slate-800/30 border-slate-700' : 'bg-slate-50 border-slate-200'} space-y-4`}>
-                                <div className="flex items-center justify-between">
-                                    <label className={`text-xs font-bold uppercase tracking-wider px-1 ${textSub}`}>
-                                        {isRTL ? 'مقاول العقد الموحد (اختياري)' : 'Subcontractor (Optional)'}
-                                    </label>
-                                    <span className={`text-[10px] font-bold px-2 py-1 rounded-full ${formData.contractType === 'Direct' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}`}>
-                                        {formData.contractType === 'Direct' ? (isRTL ? 'عقد مباشر' : 'Direct Contract') : (isRTL ? 'مقاول باطن' : 'Subcontract')}
-                                    </span>
-                                </div>
-                                
-                                <div className="relative">
-                                    <select 
-                                        className={`w-full rounded-xl px-5 py-4 outline-none transition-all text-sm font-bold appearance-none cursor-pointer ${inputBg}`}
-                                        value={formData.subcontractorId}
-                                        onChange={(e) => handleSubcontractorChange(e.target.value)}
-                                    >
-                                        <option value="">{isRTL ? '-- بدون مقاول (يصنف كعقد مباشر) --' : '-- No Subcontractor (Direct) --'}</option>
-                                        <optgroup label={isRTL ? "المقاولين الحاليين" : "Existing Subcontractors"}>
-                                            {subcontractors.map(sub => <option key={sub.id} value={sub.id}>{sub.name}</option>)}
-                                        </optgroup>
-                                        <optgroup label="----">
-                                            <option value="NEW" className="text-blue-600 font-black">{isRTL ? '+ إضافة مقاول جديد' : '+ Add New Subcontractor'}</option>
-                                        </optgroup>
-                                    </select>
-                                    <Building2 className={`absolute ${isRTL ? 'left-4' : 'right-4'} top-4 text-slate-400 pointer-events-none`} size={20}/>
-                                </div>
-                            </div>
+                    {selectedEquipment.length > 0 && (
+                        <div className={`flex flex-wrap gap-2 p-4 rounded-xl border min-h-[60px] ${isDark ? 'bg-slate-800/50 border-slate-700' : 'bg-blue-50/50 border-blue-100'}`}>
+                            {selectedEquipment.map(item => (
+                                <span key={item} className="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-2 shadow-sm animate-in zoom-in duration-200">
+                                    <HardHat size={14} className="opacity-70"/> {item}
+                                    <button type="button" onClick={() => removeEquipment(item)} className="hover:text-red-300 ml-1 transition-colors"><X size={14}/></button>
+                                </span>
+                            ))}
                         </div>
                     )}
 
-                    {/* Step 2: Timeline */}
-                    {currentStep === 2 && (
-                        <div className="space-y-6">
-                            <div className="grid grid-cols-2 gap-6">
-                                <ModernInput type="date" label={isRTL ? 'تاريخ البدء' : 'Start Date'} value={formData.startDate} onChange={(v: string) => setFormData({...formData, startDate: v})} isDark={isDark} inputBg={inputBg} />
-                                <ModernInput type="date" label={isRTL ? 'تاريخ الانتهاء' : 'End Date'} value={formData.endDate} onChange={(v: string) => setFormData({...formData, endDate: v})} isDark={isDark} inputBg={inputBg} />
-                            </div>
-                            <ModernInput type="number" label={isRTL ? 'الميزانية (ر.س)' : 'Budget (SAR)'} value={formData.budget} onChange={(v: string) => setFormData({...formData, budget: v})} icon={DollarSign} isDark={isDark} inputBg={inputBg} />
-                        </div>
-                    )}
-
-                    {/* Step 3: Location */}
-                    {currentStep === 3 && (
-                        <div className="space-y-6">
-                            <div className={`h-[400px] w-full rounded-[2rem] overflow-hidden relative z-0 border ${isDark ? 'border-slate-700' : 'border-slate-200'}`}>
-                                <ProjectMapPicker lat={formData.coordinates.lat} lng={formData.coordinates.lng} onLocationSelect={(lat, lng) => setFormData(prev => ({...prev, coordinates: {lat, lng}}))} />
-                                <div className="absolute top-4 left-4 right-4 z-10"><div className={`${glassCard} p-2 rounded-xl`}><ModernInput label="" placeholder={isRTL ? 'وصف الموقع...' : 'Location desc...'} value={formData.locationName} onChange={(v: string) => setFormData({...formData, locationName: v})} isDark={isDark} inputBg="bg-transparent border-none" icon={MapPin} /></div></div>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Step 4: Managers & Resources */}
-                    {currentStep === 4 && (
-                        <div className="space-y-8">
-                            {/* Managers */}
-                            <div className="space-y-3">
-                                <label className={`text-xs font-bold uppercase tracking-wider px-1 ${textSub}`}>{isRTL ? 'تكليف مدراء المشروع (متعدد)' : 'Assign Project Managers'}</label>
-                                <ModernInput label="" placeholder={isRTL ? 'ابحث عن مدير...' : 'Search managers...'} value={managerSearch} onChange={(v: string) => setManagerSearch(v)} isDark={isDark} inputBg={inputBg} icon={Search} />
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[250px] overflow-y-auto pr-2 custom-scrollbar">
-                                    {loadingManagers ? (
-                                        <div className="col-span-2 py-8 flex justify-center"><Loader2 className="animate-spin text-blue-500" /></div>
-                                    ) : availableManagers.filter(m => m.full_name.toLowerCase().includes(managerSearch.toLowerCase())).map(mgr => {
-                                        const isSelected = formData.managers.some(m => m.id === mgr.id);
-                                        const isBusy = mgr.active_projects > 0;
-                                        return (
-                                            <div key={mgr.id} onClick={() => toggleManager(mgr)} className={`p-4 rounded-2xl border cursor-pointer transition-all flex items-center justify-between group ${isSelected ? 'bg-blue-600/10 border-blue-500 shadow-sm ring-1 ring-blue-500/20' : `${isDark ? 'bg-slate-800/50 border-slate-700' : 'bg-slate-50 border-slate-200 hover:bg-white'}`}`}>
-                                                <div className="flex items-center gap-3">
-                                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm ${isSelected ? 'bg-blue-600 text-white' : isDark ? 'bg-slate-700 text-slate-300' : 'bg-slate-200 text-slate-600'}`}>{mgr.full_name.charAt(0)}</div>
-                                                    <div>
-                                                        <div className={`text-sm font-bold ${isSelected ? 'text-blue-600 dark:text-blue-400' : textMain}`}>{mgr.full_name}</div>
-                                                        <div className="flex items-center gap-2 mt-1">
-                                                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded flex items-center gap-1 ${isBusy ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}><Briefcase size={10}/> {mgr.active_projects}</span>
-                                                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded flex items-center gap-1 bg-purple-100 text-purple-700`}><Star size={10}/> {mgr.completion_rate}%</span>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                                <div className={`w-5 h-5 rounded border flex items-center justify-center transition ${isSelected ? 'bg-blue-600 border-blue-600 text-white' : 'border-slate-300'}`}>{isSelected && <CheckCircle2 size={14}/>}</div>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            </div>
-
-                            {/* Equipment */}
-                            <div className="space-y-3 pt-4 border-t border-dashed border-slate-200/20">
-                                <label className={`text-xs font-bold uppercase tracking-wider px-1 flex justify-between ${textSub}`}>
-                                    <span>{isRTL ? 'المعدات الرئيسية' : 'Key Equipment'}</span>
-                                    <span className="text-[10px] bg-slate-200 dark:bg-slate-700 px-2 py-0.5 rounded-full">{isRTL ? 'اختياري' : 'Optional'}</span>
-                                </label>
-                                <ModernSelect label="" options={['Generator 500kVA', 'Testing Van', 'Safety Kit', 'Cable Analyzer', 'Excavator']} value="" onChange={(v: string) => { if(v && !formData.equipment.includes(v)) setFormData({...formData, equipment: [...formData.equipment, v]}) }} isDark={isDark} inputBg={inputBg} placeholder={isRTL ? 'اختر معدات لربطها بالمشروع...' : 'Select equipment...'} />
-                                <div className="flex flex-wrap gap-2">
-                                    {formData.equipment.map((eq, i) => (
-                                        <span key={i} className="bg-amber-500/10 text-amber-600 border border-amber-500/20 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-2">
-                                            <HardHat size={14}/> {eq} <button onClick={() => setFormData(prev => ({...prev, equipment: prev.equipment.filter((_, idx) => idx !== i)}))} className="hover:text-red-500 ml-1"><X size={14}/></button>
-                                        </span>
-                                    ))}
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Step 5: Compliance */}
-                    {currentStep === 5 && (
-                        <div className="space-y-6">
-                            <div onClick={() => fileInputRef.current?.click()} className={`group border-2 border-dashed rounded-[2rem] p-10 text-center transition-all cursor-pointer relative overflow-hidden ${isCompressing ? 'border-blue-500 bg-blue-50' : isDark ? 'border-slate-700 hover:border-blue-500 hover:bg-slate-800' : 'border-slate-300 hover:border-blue-500 hover:bg-blue-50'}`}>
-                                <input type="file" ref={fileInputRef} className="hidden" multiple accept="image/*,.pdf" onChange={handleFileChange} />
-                                <div className="flex flex-col items-center gap-4 relative z-10">
-                                    <div className="w-16 h-16 bg-blue-600/10 rounded-2xl flex items-center justify-center text-blue-600 group-hover:scale-110 transition-transform">{isCompressing ? <Loader2 className="animate-spin" size={32}/> : <UploadCloud size={32} />}</div>
-                                    <div><h4 className={`text-sm font-bold ${textMain}`}>{isCompressing ? (isRTL ? 'جاري الضغط...' : 'Compressing...') : (isRTL ? 'رفع ملفات (عقود، مخططات)' : 'Upload Files')}</h4></div>
-                                </div>
-                            </div>
-
-                            {uploadedFiles.length > 0 && (
-                                <div className="space-y-2 animate-in fade-in">
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                        {uploadedFiles.map((file, idx) => (
-                                            <div key={idx} className={`p-3 rounded-xl border flex items-center justify-between ${isDark ? 'bg-slate-800/50 border-slate-700' : 'bg-slate-50 border-slate-200'}`}>
-                                                <div className="flex items-center gap-3 overflow-hidden">
-                                                    <div className={`p-2 rounded-lg ${file.type.includes('pdf') ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'}`}><FileIcon size={16}/></div>
-                                                    <div className="truncate"><div className={`text-xs font-bold truncate ${textMain}`}>{file.name}</div><div className={`text-[10px] ${textSub}`}>{(file.size / 1024 / 1024).toFixed(2)} MB</div></div>
-                                                </div>
-                                                <button onClick={() => setUploadedFiles(prev => prev.filter((_, i) => i !== idx))} className="p-2 hover:bg-red-100 text-slate-400 hover:text-red-500 rounded-lg"><X size={16}/></button>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-
-                            <div className="space-y-3 pt-4 border-t border-slate-200/20">
-                                <label className={`text-xs font-bold uppercase tracking-wider px-1 ${textSub}`}>{isRTL ? 'الاشتراطات' : 'Checklist'}</label>
-                                {Object.keys(formData.complianceItems).map(key => (
-                                    <label key={key} className={`flex items-center gap-4 p-4 rounded-xl cursor-pointer border transition-all ${isDark ? 'bg-slate-800 border-slate-700 hover:bg-slate-700' : 'bg-slate-50 border-slate-200 hover:bg-white hover:shadow-sm'}`}>
-                                        <div className={`w-5 h-5 rounded border flex items-center justify-center transition ${formData.complianceItems[key] ? 'bg-blue-600 border-blue-600' : 'border-slate-400'}`}>
-                                            {formData.complianceItems[key] && <CheckCircle2 size={14} className="text-white"/>}
-                                        </div>
-                                        <input type="checkbox" className="hidden" checked={formData.complianceItems[key]} onChange={() => toggleCompliance(key)}/>
-                                        <span className={`text-sm font-bold ${textMain}`}>{key}</span>
-                                    </label>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
+                        <div className={`p-4 rounded-xl border ${isDark ? 'bg-slate-800/30 border-slate-700' : 'bg-slate-50 border-slate-200'}`}>
+                            <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-3">{isRTL ? 'مقترحات سريعة (معدات وآليات ثقيلة)' : 'Quick Heavy Equipment'}</div>
+                            <div className="flex flex-wrap gap-2">
+                                {PREDEFINED_EQUIPMENT.map(eq => (
+                                    <button type="button" key={eq} onClick={() => addEquipment(eq)} disabled={selectedEquipment.includes(eq)} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold border transition ${selectedEquipment.includes(eq) ? 'bg-slate-200 text-slate-400 border-slate-200 cursor-not-allowed' : 'bg-white hover:border-blue-500 hover:text-blue-600 border-slate-200 text-slate-700'}`}>
+                                        + {eq}
+                                    </button>
                                 ))}
                             </div>
                         </div>
-                    )}
-
+                        <div className={`p-4 rounded-xl border ${isDark ? 'bg-slate-800/30 border-slate-700' : 'bg-slate-50 border-slate-200'}`}>
+                            <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-3">{isRTL ? 'مقترحات سريعة (أدوات خفيفة وسلامة)' : 'Quick Tools & Safety'}</div>
+                            <div className="flex flex-wrap gap-2">
+                                {PREDEFINED_TOOLS.map(tool => (
+                                    <button type="button" key={tool} onClick={() => addEquipment(tool)} disabled={selectedEquipment.includes(tool)} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold border transition ${selectedEquipment.includes(tool) ? 'bg-slate-200 text-slate-400 border-slate-200 cursor-not-allowed' : 'bg-white hover:border-amber-500 hover:text-amber-600 border-slate-200 text-slate-700'}`}>
+                                        + {tool}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
                 </div>
+            </div>
+        </section>
 
-                <div className="flex justify-between items-center pt-8 border-t border-slate-200/10 mt-8">
-                    <button onClick={handleBack} disabled={currentStep === 1 || isSubmitting} className={`px-6 py-3 rounded-xl font-bold text-sm transition flex items-center gap-2 ${currentStep === 1 ? 'opacity-0' : `${textSub} hover:${textMain}`}`}>
-                        {isRTL ? <ArrowRight size={18}/> : <ArrowLeft size={18}/>} {isRTL ? 'السابق' : 'Back'}
-                    </button>
-                    <button onClick={currentStep === 5 ? handleCreateProject : handleNext} disabled={isSubmitting} className={`px-8 py-3 rounded-xl font-bold text-sm text-white shadow-xl flex items-center gap-3 transition-all hover:scale-105 active:scale-95 disabled:opacity-70 disabled:hover:scale-100 ${currentStep === 5 ? 'bg-emerald-500 shadow-emerald-500/30' : 'bg-blue-600 shadow-blue-600/30'}`}>
-                        {isSubmitting ? <><Loader2 className="animate-spin" size={18}/> {isRTL ? 'جاري الحفظ...' : 'Saving...'}</> : (currentStep === 5 ? (isRTL ? 'اعتماد وإنشاء' : 'Submit Project') : (isRTL ? 'التالي' : 'Next Step'))}
-                        {!isSubmitting && currentStep !== 5 && (isRTL ? <ArrowLeft size={18}/> : <ArrowRight size={18}/>)}
-                    </button>
+        {/* Section 6: Documents & Notes */}
+        <section className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            
+            {/* Upload */}
+            <div className={`p-8 rounded-[2rem] shadow-sm flex flex-col ${glassCard}`}>
+                <h3 className={`text-lg font-black flex items-center gap-2 mb-4 ${textMain}`}>
+                    <FileText className="text-rose-500" size={20}/> {isRTL ? 'العقود والمستندات' : 'Contracts & Docs'}
+                </h3>
+                <div onClick={() => fileInputRef.current?.click()} className={`flex-1 border-2 border-dashed rounded-2xl flex flex-col items-center justify-center p-8 text-center cursor-pointer transition-all ${isDark ? 'border-slate-700 bg-slate-800/30 hover:border-blue-500' : 'border-slate-300 bg-slate-50 hover:border-blue-500 hover:bg-blue-50/50'}`}>
+                    <input type="file" ref={fileInputRef} className="hidden" multiple onChange={handleFileChange} />
+                    <UploadCloud size={32} className="text-blue-500 mb-3"/>
+                    <div className="text-sm font-bold mb-1">{isRTL ? 'اضغط لرفع المستندات والملفات' : 'Click to Upload'}</div>
+                    <div className="text-xs text-slate-400">{isRTL ? 'يدعم الصور، PDF، وورد، اكسل، والمزيد' : 'Supports Images, PDFs, Docs'}</div>
                 </div>
-            </motion.div>
-          </AnimatePresence>
-        </div>
+                {/* Uploaded List */}
+                {uploadedFiles.length > 0 && (
+                    <div className="mt-4 space-y-2 max-h-[120px] overflow-y-auto custom-scrollbar">
+                        {uploadedFiles.map((file, idx) => (
+                            <div key={idx} className={`flex items-center justify-between p-3 rounded-xl border ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'}`}>
+                                <div className="flex items-center gap-3 overflow-hidden">
+                                    <div className={`p-2 rounded-lg ${file.type.includes('pdf') ? 'bg-red-100 text-red-600' : file.type.includes('image') ? 'bg-blue-100 text-blue-600' : 'bg-emerald-100 text-emerald-600'}`}><FileIcon size={16}/></div>
+                                    <div className="truncate"><div className={`text-xs font-bold truncate ${textMain}`}>{file.name}</div><div className={`text-[10px] ${textSub}`}>{(file.size / 1024 / 1024).toFixed(2)} MB</div></div>
+                                </div>
+                                <button type="button" onClick={() => removeFile(idx)} className="p-2 hover:bg-red-100 text-slate-400 hover:text-red-500 rounded-lg transition-colors"><X size={16}/></button>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
+
+            {/* Notes */}
+            <div className={`p-8 rounded-[2rem] shadow-sm flex flex-col ${glassCard}`}>
+                <h3 className={`text-lg font-black flex items-center gap-2 mb-4 ${textMain}`}>
+                    <Briefcase className="text-slate-500" size={20}/> {isRTL ? 'ملاحظات وتفاصيل العمل' : 'Project Notes'}
+                </h3>
+                <textarea placeholder={isRTL ? 'اكتب أي ملاحظات تخص تفاصيل العمل، الشروط الخاصة، طريقة التنفيذ، أو متطلبات إضافية من العميل...' : 'Any special conditions or details...'} value={formData.projectNotes} onChange={e => setFormData({...formData, projectNotes: e.target.value})} className={`flex-1 w-full p-4 rounded-2xl border outline-none focus:border-blue-500 font-bold text-sm resize-none ${inputBg}`} />
+            </div>
+
+        </section>
+
       </main>
 
-      {/* --- نافذة إنشاء مقاول جديد (Modal) --- */}
-      <AnimatePresence>
-          {isNewSubModalOpen && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
-                  <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className={`w-full max-w-md p-6 rounded-3xl shadow-2xl ${isDark ? 'bg-slate-900 border border-slate-700' : 'bg-white'}`}>
-                      <div className="flex justify-between items-center mb-6">
-                          <h3 className={`text-lg font-bold ${textMain}`}>{isRTL ? 'تسجيل مقاول جديد' : 'New Subcontractor'}</h3>
-                          <button onClick={() => {setIsNewSubModalOpen(false); setFormData(prev => ({...prev, subcontractorId: '', contractType: 'Direct'}))}} className="p-2 hover:bg-slate-100 rounded-full text-slate-500"><X size={20}/></button>
-                      </div>
-                      <div className="space-y-4">
-                          <ModernInput label={isRTL ? 'اسم الشركة / المقاول' : 'Company Name'} value={newSubName} onChange={setNewSubName} isDark={isDark} inputBg={inputBg} icon={Building2} autoFocus />
-                          <button onClick={createNewSubcontractor} disabled={isCreatingSub || !newSubName.trim()} className="w-full py-3.5 bg-blue-600 text-white font-bold rounded-xl flex justify-center items-center gap-2 hover:bg-blue-700 disabled:opacity-50 transition-all">
-                              {isCreatingSub ? <Loader2 className="animate-spin"/> : <CheckCircle2 size={18}/>}
-                              {isRTL ? 'حفظ وإضافة' : 'Save & Add'}
-                          </button>
-                      </div>
-                  </motion.div>
-              </div>
-          )}
-      </AnimatePresence>
     </div>
   );
-}
-
-// --- Modern UI Components ---
-function ModernInput({ label, value, onChange, icon: Icon, type = "text", autoFocus = false, isDark, inputBg, placeholder }: any) {
-    return (
-        <div className="space-y-2 group">
-            {label && <label className={`text-xs font-bold uppercase tracking-wider px-1 transition-colors ${isDark ? 'text-slate-400 group-focus-within:text-blue-400' : 'text-slate-500 group-focus-within:text-blue-600'}`}>{label}</label>}
-            <div className="relative">
-                {Icon && <Icon className={`absolute ${label === '' ? 'left-4 top-3.5' : 'right-4 top-3.5'} text-slate-400 w-5 h-5 group-focus-within:text-blue-500 transition-colors`} />}
-                <input type={type} placeholder={placeholder} autoFocus={autoFocus} className={`w-full rounded-xl px-5 py-3.5 outline-none transition-all duration-300 text-sm font-bold ${inputBg} ${Icon ? (label === '' ? 'pl-12' : 'pr-12') : ''}`} value={value} onChange={(e) => onChange(e.target.value)} />
-            </div>
-        </div>
-    );
-}
-
-function ModernSelect({ label, options, value, onChange, isDark, inputBg, placeholder }: any) {
-    return (
-        <div className="space-y-2 group">
-            {label && <label className={`text-xs font-bold uppercase tracking-wider px-1 transition-colors ${isDark ? 'text-slate-400 group-focus-within:text-blue-400' : 'text-slate-500 group-focus-within:text-blue-600'}`}>{label}</label>}
-            <div className="relative">
-                <select className={`w-full rounded-xl px-5 py-3.5 outline-none transition-all text-sm font-bold appearance-none cursor-pointer ${inputBg}`} value={value} onChange={(e) => onChange(e.target.value)}>
-                    {placeholder ? <option value="" disabled>{placeholder}</option> : <option value="" disabled>Select...</option>}
-                    {options.map((opt: string) => <option key={opt} value={opt}>{opt}</option>)}
-                </select>
-                <ChevronDown className="absolute left-4 top-4 text-slate-400 pointer-events-none" size={18}/>
-            </div>
-        </div>
-    );
 }

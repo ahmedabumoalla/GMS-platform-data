@@ -277,10 +277,9 @@ export default function Home() {
           
           {/* 1. الشعار واسم الشركة */}
           <Link href="/" className="flex items-center gap-4 group">
-            <img src="/logo.png" alt="GMS" className="h-16 md:h-20 w-auto object-contain transition-transform duration-300 group-hover:scale-105 drop-shadow-xl" />
+            <img src="/logo.png" className="h-24 md:h-42 w-auto object-contain transition-transform duration-300 group-hover:scale-105 drop-shadow-xl" />
             <div className={`flex flex-col ${scrolled ? 'opacity-0 w-0 overflow-hidden' : 'opacity-100 w-auto'} transition-all duration-300`}>
-              <span className={`font-black tracking-tighter leading-none text-2xl ${isDark ? 'text-white' : 'text-slate-900'}`}>GMS</span>
-              <span className={`text-[10px] font-bold tracking-widest uppercase ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>Platform</span>
+              <span className={`font-black tracking-tighter leading-none text-2xl ${isDark ? 'text-white' : 'text-slate-900'}`}></span>
             </div>
           </Link>
 

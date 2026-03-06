@@ -4,41 +4,45 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import { 
-  Users, Search, Filter, Phone, Mail, MoreHorizontal, 
-  Briefcase, Star, BrainCircuit, LayoutGrid, List,
-  ShieldCheck, AlertTriangle, Zap, CheckCircle2, Trophy, Loader2,
-  X, MessageSquare, ChevronDown, TrendingDown, TrendingUp
+  Users, Search, Phone, Mail, 
+  Briefcase, LayoutGrid, List,
+  Loader2, X, MapPin, Building, Clock, FileSignature, AlertTriangle, ShieldCheck,
+  CheckCircle2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-
-// ✅ استيراد الكونتكست العام
 import { useDashboard } from '../../layout'; 
 
-// --- Types & Interfaces ---
-type AvailabilityStatus = 'Available' | 'Assigned' | 'Overloaded' | 'On Leave';
+// --- Types ---
+type AvailabilityStatus = 'Available' | 'Assigned' | 'Overloaded';
 
 interface TeamMember {
   id: string;
   name: string;
+  national_id: string;
+  employee_id: string;
   role: string;
   job_title: string;
-  specialization: string;
-  status: AvailabilityStatus;
-  performanceScore: number; 
-  projects: string[];
-  skills: string[];
-  workload: number; // 0-100%
-  safetyStatus: 'Valid' | 'Expired' | 'Pending';
+  phone: string;
   email: string;
+  region: string;
+  branch: string;
+  start_date: string;
+  manager_name: string;
+  status: AvailabilityStatus;
+  projects: string[];
+  workload: number;
   completedTasks: number;
   rejectedTasks: number;
   totalTasks: number;
+  // 🚀 حقل جديد: سجل الإجراءات الإدارية للموظف
+  actionHistory: any[]; 
 }
 
 export default function EnterpriseWorkforcePage() {
   const { lang, user, isDark } = useDashboard();
   const isRTL = lang === 'ar';
   const router = useRouter();
+  const isAdmin = user?.role === 'super_admin' || user?.role === 'admin';
   
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [members, setMembers] = useState<TeamMember[]>([]);
@@ -46,397 +50,344 @@ export default function EnterpriseWorkforcePage() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   
-  const [isAiAnalyzing, setIsAiAnalyzing] = useState(false);
-  const [aiInsight, setAiInsight] = useState<string | null>(null);
+  // 🚀 حالة لعداد القرارات المعلقة
+  const [pendingActionsCount, setPendingActionsCount] = useState(0);
+  const [selectedMember, setSelectedMember] = useState<TeamMember | null>(null);
 
-  // 🚀 حالة فتح نافذة تفاصيل الأداء
-  const [isPerformanceModalOpen, setIsPerformanceModalOpen] = useState(false);
+  // --- دالة حساب العمر داخل الشركة ---
+  const getCompanyTenure = (startDate: string) => {
+    if (!startDate) return isRTL ? 'غير محدد' : 'N/A';
+    const start = new Date(startDate);
+    const now = new Date();
+    const diffTime = Math.abs(now.getTime() - start.getTime());
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    const years = Math.floor(diffDays / 365);
+    const months = Math.floor((diffDays % 365) / 30);
+    
+    if (years > 0) return `${years} ${isRTL ? 'سنة' : 'Y'} ${months > 0 ? `و ${months} ${isRTL ? 'شهر' : 'M'}` : ''}`;
+    if (months > 0) return `${months} ${isRTL ? 'شهر' : 'Months'}`;
+    return `${diffDays} ${isRTL ? 'يوم' : 'Days'}`;
+  };
 
-  // --- 1. Fetch Real Data ---
+  // --- جلب البيانات ---
   useEffect(() => {
     const fetchTeamData = async () => {
       setLoading(true);
       try {
-        const { data: profiles, error: profError } = await supabase
-          .from('profiles')
-          .select('*')
-          .in('role', ['technician', 'engineer']);
-        
+        // 1. جلب الموظفين
+        const { data: allProfiles, error: profError } = await supabase.from('profiles').select('*');
         if (profError) throw profError;
 
-        if (profiles) {
-            // جلب المهام لحساب الأداء والعبء
-            const { data: assignments } = await supabase
-                .from('task_assignments')
-                .select('tech_id, status, projects(title)');
+        // 2. جلب جميع الإجراءات الإدارية المحفوظة
+        const { data: allActions } = await supabase.from('hr_actions').select('*').order('created_at', { ascending: false });
+        
+        // حساب الإجراءات المعلقة للأدمن
+        if (isAdmin && allActions) {
+            setPendingActionsCount(allActions.filter(a => a.status === 'Pending Approval').length);
+        }
 
-            const formattedMembers: TeamMember[] = profiles.map(profile => {
-                const empTasks = assignments?.filter(a => a.tech_id === profile.id) || [];
-                
-                // حساب المهام النشطة
-                const activeTasks = empTasks.filter(a => ['Pending', 'Accepted'].includes(a.status));
+        if (allProfiles) {
+            const techs = allProfiles.filter(p => ['technician', 'engineer'].includes(p.role));
+            const assignmentsRes = await supabase.from('task_assignments').select('tech_id, status, projects(title)');
+            const assignments = assignmentsRes.data || [];
+
+            const formattedMembers: TeamMember[] = techs.map(profile => {
+                const empTasks = assignments.filter(a => a.tech_id === profile.id);
+                const activeTasks = empTasks.filter(a => ['Pending', 'Accepted', 'In Progress'].includes(a.status));
                 const activeProjects = Array.from(new Set(activeTasks.map((t: any) => t.projects?.title).filter(Boolean)));
                 
-                // إحصائيات الأداء الحقيقية
                 const totalTasks = empTasks.length;
                 const completedTasks = empTasks.filter(a => a.status === 'Completed').length;
                 const rejectedTasks = empTasks.filter(a => a.status === 'Rejected').length;
 
-                // 🚀 معادلة ذكية لحساب تقييم الأداء من 100
-                // يبدأ الموظف بـ 80 كنقطة أساس. الإنجاز يرفعها، والرفض ينزلها.
-                let calculatedScore = 80; 
-                if (totalTasks > 0) {
-                    calculatedScore = Math.round(((completedTasks * 1.2) - (rejectedTasks * 0.5) / totalTasks) * 100);
-                    // التأكد أن النسبة لا تتجاوز 100 ولا تقل عن 0
-                    calculatedScore = Math.max(10, Math.min(100, calculatedScore)); 
-                } else if (profile.completion_rate) {
-                    calculatedScore = profile.completion_rate;
-                } else {
-                    calculatedScore = 100; // موظف جديد ليس لديه مهام
-                }
-
-                // حساب عبء العمل
                 let workload = Math.min(activeTasks.length * 25, 100);
+                let status: AvailabilityStatus = workload >= 80 ? 'Overloaded' : workload > 0 ? 'Assigned' : 'Available';
+
+                const manager = allProfiles.find(p => p.id === profile.manager_id);
                 
-                let status: AvailabilityStatus = 'Available';
-                if (workload >= 80) status = 'Overloaded';
-                else if (workload > 0) status = 'Assigned';
+                // 🚀 استخراج سجل قرارات هذا الموظف فقط
+                const empActions = allActions?.filter(action => action.employee_id === profile.id) || [];
 
                 return {
                     id: profile.id,
                     name: profile.full_name || 'Unknown',
+                    national_id: profile.national_id || 'غير مسجل',
+                    employee_id: profile.employee_id || 'N/A',
                     role: profile.role,
-                    job_title: profile.job_title || (isRTL ? 'غير محدد' : 'N/A'),
-                    specialization: profile.specialization || (isRTL ? 'عام' : 'General'),
+                    job_title: profile.job_title || 'غير محدد',
+                    phone: profile.phone || 'غير مسجل',
+                    email: profile.email || 'غير مسجل',
+                    region: profile.region || 'غير محدد',
+                    branch: profile.branch || 'الفرع الرئيسي',
+                    start_date: profile.start_date,
+                    manager_name: manager ? manager.full_name : 'لا يوجد مدير مباشر',
                     status,
-                    performanceScore: calculatedScore,
                     projects: activeProjects,
-                    skills: profile.skills || ['Safety First', 'Technical Expert'],
                     workload,
-                    safetyStatus: 'Valid', 
-                    email: profile.email || '',
                     completedTasks,
                     rejectedTasks,
-                    totalTasks
+                    totalTasks,
+                    actionHistory: empActions // 👈 تمرير السجل للبطاقة
                 };
             });
 
-            // ترتيب بحيث يظهر المتاحون أولاً ثم المشغولين
             formattedMembers.sort((a, b) => a.workload - b.workload);
-
             setMembers(formattedMembers);
             setFilteredMembers(formattedMembers);
         }
-      } catch (error) {
-        console.error("Error fetching team data:", error);
-      } finally {
-        setLoading(false);
-      }
+      } catch (error) { console.error(error); } finally { setLoading(false); }
     };
-
     fetchTeamData();
-  }, [user]);
+  }, [user, isAdmin]);
 
-  // --- 2. Search & Filter ---
+  // --- البحث ---
   useEffect(() => {
-      if (!searchQuery.trim()) {
-          setFilteredMembers(members);
-      } else {
+      if (!searchQuery.trim()) { setFilteredMembers(members); } 
+      else {
           const q = searchQuery.toLowerCase();
           setFilteredMembers(members.filter(m => 
-              m.name.toLowerCase().includes(q) || 
-              m.job_title.toLowerCase().includes(q) ||
-              m.specialization.toLowerCase().includes(q)
+              m.name.toLowerCase().includes(q) || m.job_title.toLowerCase().includes(q) || m.employee_id?.toLowerCase().includes(q) || m.national_id?.includes(q)
           ));
       }
   }, [searchQuery, members]);
 
-  // --- 3. Handlers ---
-  const runAiOptimization = () => {
-    setIsAiAnalyzing(true);
-    setTimeout(() => {
-      setIsAiAnalyzing(false);
-      
-      const overloaded = members.filter(m => m.status === 'Overloaded');
-      const lowPerformance = members.filter(m => m.performanceScore < 60);
-
-      if (overloaded.length > 0) {
-          setAiInsight(isRTL 
-            ? `تحليل القوى العاملة: "${overloaded[0].name}" يواجه خطر الإجهاد (${overloaded[0].workload}% عبء عمل). يُنصح بنقل بعض مهامه.` 
-            : `Workforce Analysis: "${overloaded[0].name}" is at burnout risk (${overloaded[0].workload}% load). Suggest reallocating tasks.`);
-      } else if (lowPerformance.length > 0) {
-          setAiInsight(isRTL 
-            ? `تنبيه أداء: الموظف "${lowPerformance[0].name}" لديه نسبة أداء منخفضة (${lowPerformance[0].performanceScore}%). يرجى مراجعة المهام المرفوضة.` 
-            : `Performance Alert: "${lowPerformance[0].name}" has low performance (${lowPerformance[0].performanceScore}%). Review rejected tasks.`);
-      } else {
-          setAiInsight(isRTL ? `توزيع الموارد ومعدل الأداء مثالي ومستقر حالياً.` : `Resource allocation and performance are currently optimal and stable.`);
-      }
-    }, 2000);
+  // --- التوجيه ---
+  const handleAdministrativeAction = (empId: string) => {
+      router.push(`/dashboard/hr/actions/${empId}`);
   };
 
-  const handleMessage = (empName: string) => {
-      router.push(`/dashboard/communication/chat?user=${encodeURIComponent(empName)}`);
-  };
-
-  // 🚀 حساب المتوسط الحقيقي
-  const averagePerformance = members.length > 0 
-      ? Math.round(members.reduce((acc, curr) => acc + curr.performanceScore, 0) / members.length)
-      : 0;
-
-  // --- Styles ---
   const bgMain = isDark ? "bg-slate-950" : "bg-slate-50";
   const textMain = isDark ? "text-white" : "text-slate-900";
   const textSub = isDark ? "text-slate-400" : "text-slate-500";
-  const cardBg = isDark ? "bg-slate-900/60 border-slate-800" : "bg-white border-slate-200";
+  const cardBg = isDark ? "bg-slate-900 border-slate-800" : "bg-white border-slate-200";
 
   return (
     <div className={`min-h-screen font-sans ${bgMain} ${isRTL ? 'dir-rtl' : 'dir-ltr'}`} dir={isRTL ? 'rtl' : 'ltr'}>
       
-      {/* --- Section 1: Team Overview Header --- */}
-      <div className={`border-b px-6 py-5 sticky top-0 z-20 backdrop-blur-xl ${isDark ? 'bg-slate-950/80 border-slate-800' : 'bg-white/80 border-slate-200 shadow-sm'}`}>
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
-          <div className="w-full md:w-auto">
-            <h1 className={`text-2xl font-black flex items-center gap-2 ${textMain}`}>
-              <Users className="text-blue-600" />
-              {isRTL ? 'إدارة القوى العاملة والفرق' : 'Workforce & Team Management'}
+      {/* --- Header --- */}
+      <div className={`border-b px-8 py-6 sticky top-0 z-20 backdrop-blur-xl ${isDark ? 'bg-slate-950/80 border-slate-800' : 'bg-white/80 border-slate-200 shadow-sm'}`}>
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div>
+            <h1 className={`text-2xl font-black flex items-center gap-3 ${textMain}`}>
+              <Users className="text-blue-600" size={28}/> {isRTL ? 'إدارة الموظفين والفرق' : 'Workforce Management'}
             </h1>
-            <p className={`text-sm font-medium mt-1 ${textSub}`}>
-              {isRTL ? 'نظرة شاملة على الكفاءة، التوفر، والأداء التشغيلي' : 'Overview of capacity, availability, and operational performance'}
-            </p>
+            <p className={`text-sm font-medium mt-1 ${textSub}`}>{isRTL ? 'نظرة شاملة على السجل الوظيفي' : 'Comprehensive view of employee records'}</p>
           </div>
           
-          <div className="flex items-center gap-3 w-full md:w-auto">
-             <div className={`h-8 w-px mx-1 ${isDark ? 'bg-slate-800' : 'bg-slate-200'}`}></div>
-             <button className={`p-2 rounded-lg transition-colors ${viewMode === 'grid' ? (isDark ? 'bg-slate-800 text-blue-400' : 'bg-slate-100 text-blue-600') : (isDark ? 'text-slate-400 hover:bg-slate-800' : 'text-slate-600 hover:bg-slate-200')}`} onClick={() => setViewMode('grid')}>
-                <LayoutGrid size={18} />
-             </button>
-             <button className={`p-2 rounded-lg transition-colors ${viewMode === 'list' ? (isDark ? 'bg-slate-800 text-blue-400' : 'bg-slate-100 text-blue-600') : (isDark ? 'text-slate-400 hover:bg-slate-800' : 'text-slate-600 hover:bg-slate-200')}`} onClick={() => setViewMode('list')}>
-                <List size={18} />
-             </button>
+          <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
              
-             {/* زر التحليل الذكي */}
-             <button 
-                onClick={runAiOptimization}
-                disabled={isAiAnalyzing || members.length === 0}
-                className="bg-blue-600 text-white px-5 py-2.5 rounded-xl font-bold text-sm hover:bg-blue-700 shadow-lg shadow-blue-600/20 transition flex items-center justify-center gap-2 disabled:opacity-50 flex-1 md:flex-none"
-             >
-                {isAiAnalyzing ? <Loader2 size={16} className="animate-spin"/> : <BrainCircuit size={16} />} 
-                {isAiAnalyzing ? (isRTL ? 'جاري التحليل...' : 'Analyzing...') : (isRTL ? 'تحليل التوزيع الذكي' : 'AI Optimization')}
-             </button>
+             {/* 🚀 زر استقبال واعتماد القرارات للأدمن */}
+             {isAdmin && (
+                 <button onClick={() => router.push('/dashboard/reports/hr-actions')} className="relative bg-amber-100 hover:bg-amber-200 text-amber-800 border border-amber-200 px-5 py-3 rounded-[1.2rem] font-bold text-sm transition flex items-center gap-2 shadow-sm">
+                     <ShieldCheck size={18}/> {isRTL ? 'مراجعة طلبات الإدارة' : 'Review HR Requests'}
+                     {pendingActionsCount > 0 && (
+                         <span className="absolute -top-2 -right-2 bg-red-500 text-white w-6 h-6 flex items-center justify-center rounded-full text-xs font-black shadow-md border-2 border-white animate-pulse">
+                             {pendingActionsCount}
+                         </span>
+                     )}
+                 </button>
+             )}
+
+             <div className="relative flex-1 md:w-72">
+                <Search className={`absolute ${isRTL ? 'left-4' : 'right-4'} top-3.5 text-slate-400 w-4 h-4`} />
+                <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder={isRTL ? 'بحث بالاسم، الهوية...' : 'Search...'} className={`w-full border rounded-[1.2rem] px-4 py-3 text-sm outline-none transition ${isDark ? 'bg-slate-900 border-slate-800 text-white focus:border-blue-500' : 'bg-slate-50 border-transparent focus:bg-white focus:border-blue-500 shadow-sm'}`} />
+            </div>
+             <div className={`hidden md:block h-8 w-px mx-1 ${isDark ? 'bg-slate-800' : 'bg-slate-200'}`}></div>
+             <button className={`p-3 rounded-xl transition-colors ${viewMode === 'grid' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : (isDark ? 'bg-slate-800 text-slate-400' : 'bg-slate-100 text-slate-600')}`} onClick={() => setViewMode('grid')}><LayoutGrid size={18} /></button>
+             <button className={`p-3 rounded-xl transition-colors ${viewMode === 'list' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : (isDark ? 'bg-slate-800 text-slate-400' : 'bg-slate-100 text-slate-600')}`} onClick={() => setViewMode('list')}><List size={18} /></button>
           </div>
         </div>
-
-        {/* 🚀 Global Summary Stats (مع تفعيل زر النقر لمعرفة تفاصيل الأداء) */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-            <StatCard isDark={isDark} label={isRTL ? 'إجمالي الفريق' : 'Total Workforce'} value={filteredMembers.length} sub={isRTL ? 'عضو' : 'Members'} color="blue" icon={Users} />
-            <StatCard isDark={isDark} label={isRTL ? 'متاح حالياً' : 'Available Now'} value={filteredMembers.filter(m => m.status === 'Available').length} sub={isRTL ? 'جاهز' : 'Ready'} color="green" icon={CheckCircle2} />
-            <StatCard isDark={isDark} label={isRTL ? 'تحت ضغط' : 'Overloaded'} value={filteredMembers.filter(m => m.status === 'Overloaded').length} sub={isRTL ? 'خطر' : 'Risk'} color="red" icon={Zap} />
-            
-            {/* 🚀 هذه البطاقة أصبحت قابلة للنقر لتفتح تفاصيل الخلل */}
-            <StatCard 
-                isDark={isDark} 
-                label={isRTL ? 'متوسط الأداء (انقر للتفاصيل)' : 'Avg. Performance (Click)'} 
-                value={`${averagePerformance}%`} 
-                sub={isRTL ? 'حقيقي' : 'Real'} 
-                color="purple" 
-                icon={Trophy} 
-                onClick={() => setIsPerformanceModalOpen(true)}
-            />
-        </div>
-
-        {/* Filters */}
-        <div className="flex flex-wrap gap-3">
-            <div className="relative flex-1 min-w-[200px]">
-                <Search className={`absolute ${isRTL ? 'left-3' : 'right-3'} top-2.5 text-slate-400 w-4 h-4`} />
-                <input 
-                    type="text" 
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder={isRTL ? 'بحث بالاسم، التخصص، أو الدور...' : 'Search name, skill, role...'} 
-                    className={`w-full border rounded-xl px-4 py-2.5 text-sm outline-none transition ${isDark ? 'bg-slate-900 border-slate-700 text-white focus:border-blue-500' : 'bg-slate-50 border-slate-200 text-slate-900 focus:border-blue-500'}`} 
-                />
-            </div>
-            <FilterSelect isDark={isDark} label={isRTL ? 'الدور الوظيفي' : 'Role'} />
-            <FilterSelect isDark={isDark} label={isRTL ? 'حالة التوفر' : 'Availability'} />
-        </div>
-
-        {/* AI Insight Box */}
-        <AnimatePresence>
-            {aiInsight && (
-                <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className={`mt-4 p-4 rounded-xl border flex items-start gap-3 ${isDark ? 'bg-indigo-900/20 border-indigo-500/30' : 'bg-indigo-50 border-indigo-100'}`}>
-                    <div className="p-2 bg-indigo-500 text-white rounded-lg shadow-sm shrink-0"><AlertTriangle size={18}/></div>
-                    <p className={`text-sm font-medium leading-relaxed mt-1 ${isDark ? 'text-indigo-200' : 'text-indigo-900'}`}>{aiInsight}</p>
-                    <button onClick={() => setAiInsight(null)} className={`mr-auto p-1 rounded-full ${isDark ? 'text-indigo-400 hover:bg-indigo-900/50' : 'text-indigo-400 hover:bg-indigo-100'}`}>
-                        <X size={16}/>
-                    </button>
-                </motion.div>
-            )}
-        </AnimatePresence>
       </div>
 
-      {/* --- Section 2: Enhanced Team Cards --- */}
-      <div className="p-6">
+      {/* --- Main Content: Employee Cards --- */}
+      <div className="p-8">
         {loading ? (
-            <div className="flex justify-center py-20"><Loader2 className="animate-spin text-blue-500" size={40} /></div>
+            <div className="flex justify-center py-20"><Loader2 className="animate-spin text-blue-500" size={50} /></div>
         ) : filteredMembers.length === 0 ? (
-            <div className={`text-center py-20 font-medium ${textSub}`}>
-                {isRTL ? 'لا يوجد أعضاء مطابقين للبحث.' : 'No team members found.'}
-            </div>
+            <div className={`text-center py-20 font-bold ${textSub}`}>{isRTL ? 'لا يوجد موظفين.' : 'No employees found.'}</div>
         ) : (
-            <div className={`grid gap-6 ${viewMode === 'grid' ? 'grid-cols-1 md:grid-cols-2 xl:grid-cols-3' : 'grid-cols-1'}`}>
-                {filteredMembers.map(member => (
-                    <motion.div initial={{opacity:0, scale:0.95}} animate={{opacity:1, scale:1}} key={member.id} className={`group rounded-2xl border transition-all duration-300 relative overflow-hidden ${cardBg} ${viewMode === 'list' ? 'flex flex-row items-center p-0' : 'hover:-translate-y-1 hover:shadow-xl'}`}>
-                        
-                        {/* Status Stripe */}
-                        <div className={`absolute ${viewMode === 'list' ? 'left-0 top-0 bottom-0 w-1.5' : 'top-0 left-0 right-0 h-1.5'} ${getStatusColor(member.status)}`}></div>
+            <div className={`grid gap-6 ${viewMode === 'grid' ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4' : 'grid-cols-1'}`}>
+                {filteredMembers.map(member => {
+                    const actionCount = member.actionHistory.filter(a => a.status === 'Approved').length;
+                    return (
+                    <motion.div 
+                        initial={{opacity:0, y:20}} animate={{opacity:1, y:0}} key={member.id} 
+                        onClick={() => setSelectedMember(member)}
+                        className={`group cursor-pointer rounded-[2rem] border transition-all duration-300 relative overflow-hidden hover:shadow-2xl hover:-translate-y-1 ${cardBg}`}
+                    >
+                        <div className={`absolute top-0 left-0 right-0 h-1.5 ${member.status === 'Available' ? 'bg-emerald-500' : member.status === 'Assigned' ? 'bg-blue-500' : 'bg-red-500'}`}></div>
 
-                        <div className={`p-6 ${viewMode === 'list' ? 'flex-1 flex items-center justify-between border-b-0 border-l border-slate-200 dark:border-slate-800' : ''}`}>
-                            {/* Header */}
+                        <div className="p-6">
                             <div className="flex justify-between items-start mb-4">
-                                <div className="flex items-center gap-4">
-                                    <div className="relative">
-                                        <div className={`w-14 h-14 rounded-2xl border-2 shadow-sm flex items-center justify-center font-black text-xl uppercase ${isDark ? 'bg-slate-800 border-slate-700 text-slate-300' : 'bg-slate-100 border-white text-slate-600'}`}>
-                                            {member.name.charAt(0)}
-                                        </div>
-                                        <div className={`absolute -bottom-2 -right-2 px-2 py-0.5 rounded-md text-[10px] font-bold border shadow-sm ${getStatusBadge(member.status, isDark)}`}>
-                                            {isRTL && member.status === 'Available' ? 'متاح' : 
-                                             isRTL && member.status === 'Assigned' ? 'مشغول جزئياً' :
-                                             isRTL && member.status === 'Overloaded' ? 'مضغوط' : 
-                                             member.status}
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <h3 className={`text-lg font-bold leading-tight group-hover:text-blue-500 transition ${textMain}`}>{member.name}</h3>
-                                        <p className={`text-xs font-medium uppercase tracking-wide mt-1 ${textSub}`}>{member.job_title}</p>
-                                        <p className="text-xs text-blue-500 font-bold mt-0.5">{member.specialization}</p>
-                                    </div>
+                                <div className={`w-14 h-14 rounded-2xl flex items-center justify-center font-black text-xl shadow-inner border ${isDark ? 'bg-slate-800 border-slate-700 text-white' : 'bg-slate-50 border-slate-100 text-slate-800'}`}>
+                                    {member.name.charAt(0)}
                                 </div>
-                                
-                                {/* Performance Score */}
-                                <div className="flex flex-col items-end">
-                                    <div className={`flex items-center gap-1 px-2 py-1 rounded-lg border ${
-                                        member.performanceScore >= 80 ? (isDark ? 'bg-emerald-900/20 border-emerald-800' : 'bg-emerald-50 border-emerald-100') :
-                                        member.performanceScore >= 50 ? (isDark ? 'bg-amber-900/20 border-amber-800' : 'bg-amber-50 border-amber-100') :
-                                        (isDark ? 'bg-red-900/20 border-red-800' : 'bg-red-50 border-red-100')
-                                    }`}>
-                                        <Star size={14} className={member.performanceScore >= 80 ? 'text-emerald-500 fill-emerald-500' : member.performanceScore >= 50 ? 'text-amber-500 fill-amber-500' : 'text-red-500 fill-red-500'}/>
-                                        <span className={`text-sm font-black ${
-                                            member.performanceScore >= 80 ? 'text-emerald-700 dark:text-emerald-400' :
-                                            member.performanceScore >= 50 ? 'text-amber-700 dark:text-amber-400' :
-                                            'text-red-700 dark:text-red-400'
-                                        }`}>{member.performanceScore}%</span>
-                                    </div>
-                                </div>
+                                <span className={`text-[10px] font-bold px-3 py-1 rounded-xl border ${member.status === 'Available' ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : member.status === 'Assigned' ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-red-50 text-red-600 border-red-200'}`}>
+                                    {member.status === 'Available' ? (isRTL ? 'متاح' : 'Available') : member.status === 'Assigned' ? (isRTL ? 'مشغول جزئياً' : 'Assigned') : (isRTL ? 'مضغوط' : 'Overloaded')}
+                                </span>
                             </div>
 
-                            {/* Workload & Projects */}
-                            <div className="space-y-4 mb-5">
-                                <div>
-                                    <div className={`flex justify-between text-xs font-bold mb-1 ${textSub}`}>
-                                        <span>{isRTL ? 'عبء العمل' : 'Workload'}</span>
-                                        <span className={member.workload >= 80 ? 'text-red-500' : textMain}>{member.workload}%</span>
-                                    </div>
-                                    <div className={`h-2 w-full rounded-full overflow-hidden ${isDark ? 'bg-slate-800' : 'bg-slate-100'}`}>
-                                        <div className={`h-full rounded-full transition-all duration-1000 ${getWorkloadColor(member.workload)}`} style={{ width: `${member.workload}%` }}></div>
-                                    </div>
-                                </div>
-
-                                <div className="flex flex-wrap gap-2">
-                                    {member.projects.length > 0 ? member.projects.map((prj, idx) => (
-                                        <div key={idx} className={`flex items-center gap-1.5 border px-2.5 py-1 rounded-lg text-[10px] font-bold ${isDark ? 'bg-slate-800/50 border-slate-700 text-slate-300' : 'bg-slate-50 border-slate-200 text-slate-600'}`}>
-                                            <Briefcase size={12} className="text-blue-500"/> {prj}
-                                        </div>
-                                    )) : (
-                                        <span className={`text-xs italic ${textSub}`}>{isRTL ? 'لا توجد مشاريع نشطة' : 'No active projects'}</span>
-                                    )}
-                                </div>
+                            <div>
+                                <h3 className={`text-lg font-black leading-tight group-hover:text-blue-500 transition ${textMain}`}>{member.name}</h3>
+                                <p className="text-xs font-bold text-blue-600 mt-1">{member.job_title}</p>
                             </div>
 
-                            {/* Skills & Certs */}
-                            <div className="flex flex-wrap gap-1.5 mb-6">
-                                {member.skills.map((skill, idx) => (
-                                    <span key={idx} className={`px-2 py-0.5 rounded-md text-[10px] font-bold border ${isDark ? 'bg-blue-900/20 text-blue-400 border-blue-800' : 'bg-blue-50 text-blue-700 border-blue-100'}`}>
-                                        {skill}
+                            <div className="mt-4 flex gap-2">
+                                <span className={`text-[10px] font-mono px-2 py-1 rounded-lg border ${isDark ? 'bg-slate-800 border-slate-700 text-slate-400' : 'bg-slate-100 border-slate-200 text-slate-500'}`}>ID: {member.employee_id}</span>
+                                {/* 🚀 مؤشر الإجراءات الإدارية على الكارت */}
+                                {actionCount > 0 && (
+                                    <span className="text-[10px] font-bold px-2 py-1 rounded-lg border bg-rose-50 text-rose-700 border-rose-200 flex items-center gap-1" title="إجراءات إدارية مسجلة">
+                                        <AlertTriangle size={10}/> {actionCount} إجراء
                                     </span>
-                                ))}
+                                )}
                             </div>
+                        </div>
 
-                            {/* Actions Footer */}
-                            <div className={`pt-4 border-t flex gap-2 ${isDark ? 'border-slate-800' : 'border-slate-100'}`}>
-                                <button onClick={() => router.push('/dashboard/projects/assign')} className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 ${isDark ? 'bg-slate-800 text-slate-300 hover:bg-blue-600 hover:text-white' : 'bg-slate-50 border border-slate-200 text-slate-600 hover:border-blue-500 hover:text-blue-600'}`}>
-                                    <Briefcase size={14}/> {isRTL ? 'إسناد لمشروع' : 'Assign'}
-                                </button>
-                                <button onClick={() => handleMessage(member.name)} className={`p-2.5 rounded-xl transition flex items-center justify-center ${isDark ? 'bg-slate-800 text-slate-300 hover:bg-slate-700' : 'bg-slate-50 border border-slate-200 text-slate-500 hover:bg-blue-50 hover:text-blue-600'}`}>
-                                    <MessageSquare size={16}/>
-                                </button>
-                            </div>
-
+                        <div className={`p-4 border-t flex items-center justify-between text-xs font-bold ${isDark ? 'bg-slate-900/50 border-slate-800 text-slate-400' : 'bg-slate-50 border-slate-100 text-slate-500'}`}>
+                            <div className="flex items-center gap-1.5"><MapPin size={14}/> {member.branch}</div>
+                            <div className="text-blue-500 group-hover:underline">{isRTL ? 'عرض السجل' : 'View Record'} &rarr;</div>
                         </div>
                     </motion.div>
-                ))}
+                )})}
             </div>
         )}
       </div>
 
-      {/* 🚀 Modal: تفاصيل الأداء لمعرفة الضعف والخلل */}
+      {/* --- 🚀 MODAL: السجل الشامل للموظف --- */}
       <AnimatePresence>
-        {isPerformanceModalOpen && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-md p-4">
-                <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }} className={`w-full max-w-3xl rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[85vh] ${isDark ? 'bg-slate-900 border border-slate-700' : 'bg-white'}`}>
+        {selectedMember && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/80 backdrop-blur-md p-4 overflow-y-auto" onClick={() => setSelectedMember(null)}>
+                <motion.div 
+                    initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }} 
+                    className={`w-full max-w-5xl my-auto rounded-[3rem] shadow-2xl overflow-hidden flex flex-col ${isDark ? 'bg-slate-900 border border-slate-700' : 'bg-white'}`}
+                    onClick={(e) => e.stopPropagation()}
+                >
                     
-                    <div className={`p-6 border-b flex justify-between items-center ${isDark ? 'border-slate-800' : 'border-slate-100'}`}>
-                        <div>
-                            <h3 className={`text-xl font-black flex items-center gap-2 ${textMain}`}><Trophy className="text-purple-500"/> {isRTL ? 'تفاصيل أداء الفريق' : 'Team Performance Details'}</h3>
-                            <p className={`text-xs mt-1 ${textSub}`}>{isRTL ? 'تحليل مبني على المهام المنجزة والمرفوضة' : 'Analysis based on completed and rejected tasks'}</p>
+                    {/* Header: Cover & Profile Pic */}
+                    <div className="relative h-32 bg-gradient-to-r from-blue-800 to-slate-900 shrink-0">
+                        <button onClick={() => setSelectedMember(null)} className="absolute top-6 left-6 rtl:left-auto rtl:right-6 p-2 bg-white/20 hover:bg-white/40 text-white rounded-full backdrop-blur-sm transition"><X size={20}/></button>
+                    </div>
+                    
+                    <div className="px-10 pb-8 relative -mt-16 flex flex-col md:flex-row gap-6 md:items-end border-b border-slate-100 dark:border-slate-800">
+                        <div className="w-32 h-32 rounded-3xl bg-white dark:bg-slate-800 border-4 border-white dark:border-slate-900 shadow-xl flex items-center justify-center text-5xl font-black text-blue-600 relative z-10 shrink-0">
+                            {selectedMember.name.charAt(0)}
                         </div>
-                        <button onClick={() => setIsPerformanceModalOpen(false)} className={`p-2 rounded-full hover:bg-red-500 hover:text-white transition-colors ${isDark ? 'bg-slate-800 text-slate-400' : 'bg-slate-100 text-slate-500'}`}><X size={20}/></button>
+                        <div className="flex-1 pb-2">
+                            <div className="flex flex-wrap items-center gap-3 mb-1">
+                                <h2 className={`text-3xl font-black ${textMain}`}>{selectedMember.name}</h2>
+                                <span className={`px-3 py-1 rounded-xl text-[10px] font-bold border ${selectedMember.status === 'Available' ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : selectedMember.status === 'Assigned' ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-red-50 text-red-600 border-red-200'}`}>
+                                    {selectedMember.status === 'Available' ? (isRTL ? 'متاح' : 'Available') : selectedMember.status === 'Assigned' ? (isRTL ? 'مشغول جزئياً' : 'Assigned') : (isRTL ? 'مضغوط' : 'Overloaded')}
+                                </span>
+                            </div>
+                            <p className="text-sm font-bold text-blue-600">{selectedMember.job_title}</p>
+                        </div>
+
+                        {/* 🚀 زر الإجراءات الإدارية الجديد */}
+                        <div className="pb-2">
+                            <button onClick={() => handleAdministrativeAction(selectedMember.id)} className="w-full md:w-auto px-8 py-3.5 bg-rose-50 hover:bg-rose-600 text-rose-600 hover:text-white border border-rose-200 hover:border-rose-600 rounded-2xl font-black text-sm transition-all shadow-sm hover:shadow-rose-500/30 flex items-center justify-center gap-2 group">
+                                <FileSignature size={18} className="group-hover:animate-pulse"/> {isRTL ? 'إصدار قرار إداري' : 'Issue HR Action'}
+                            </button>
+                        </div>
                     </div>
 
-                    <div className="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar">
-                        {/* 🚀 نرتب الموظفين من الأسوأ للأفضل لمعرفة الخلل فوراً */}
-                        {[...members].sort((a, b) => a.performanceScore - b.performanceScore).map(member => (
-                            <div key={member.id} className={`p-4 rounded-2xl border flex flex-col md:flex-row items-start md:items-center justify-between gap-4 ${isDark ? 'bg-slate-800/50 border-slate-700' : 'bg-slate-50 border-slate-200'}`}>
-                                <div className="flex items-center gap-4">
-                                    <div className="relative">
-                                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center font-black text-lg shadow-inner ${member.performanceScore >= 80 ? 'bg-emerald-100 text-emerald-600' : member.performanceScore >= 50 ? 'bg-amber-100 text-amber-600' : 'bg-red-100 text-red-600'}`}>
-                                            {member.name.charAt(0)}
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <h4 className={`font-bold text-sm ${textMain}`}>{member.name}</h4>
-                                        <div className={`text-xs mt-1 font-medium ${member.performanceScore < 60 ? 'text-red-500' : textSub}`}>
-                                            {member.performanceScore < 60 ? (isRTL ? 'يوجد خلل وضعف في الإنجاز!' : 'Poor performance detected!') : member.job_title}
-                                        </div>
-                                    </div>
+                    {/* Content Grid */}
+                    <div className="p-10 grid grid-cols-1 lg:grid-cols-12 gap-8 overflow-y-auto max-h-[60vh] custom-scrollbar">
+                        
+                        {/* Right Column: Details */}
+                        <div className="lg:col-span-7 space-y-6">
+                            
+                            <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2"><Briefcase size={16}/> {isRTL ? 'البيانات الوظيفية والتنظيمية' : 'Job & Organization Info'}</h4>
+                            
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className={`p-4 rounded-2xl border ${isDark ? 'bg-slate-800/50 border-slate-700' : 'bg-slate-50 border-slate-200'}`}>
+                                    <div className="text-[10px] font-bold text-slate-500 mb-1">{isRTL ? 'الرقم الوظيفي' : 'Employee ID'}</div>
+                                    <div className={`font-mono font-black text-sm ${textMain}`}>{selectedMember.employee_id}</div>
                                 </div>
-
-                                <div className="flex items-center gap-6 w-full md:w-auto">
-                                    <div className="flex gap-4 text-center">
-                                        <div>
-                                            <div className="text-[10px] font-bold text-slate-400 uppercase">{isRTL ? 'مكتملة' : 'Done'}</div>
-                                            <div className="font-black text-emerald-500">{member.completedTasks}</div>
-                                        </div>
-                                        <div>
-                                            <div className="text-[10px] font-bold text-slate-400 uppercase">{isRTL ? 'مرفوضة' : 'Rejected'}</div>
-                                            <div className={`font-black ${member.rejectedTasks > 0 ? 'text-red-500' : textMain}`}>{member.rejectedTasks}</div>
-                                        </div>
-                                        <div>
-                                            <div className="text-[10px] font-bold text-slate-400 uppercase">{isRTL ? 'الإجمالي' : 'Total'}</div>
-                                            <div className={`font-black ${textMain}`}>{member.totalTasks}</div>
-                                        </div>
+                                <div className={`p-4 rounded-2xl border ${isDark ? 'bg-slate-800/50 border-slate-700' : 'bg-slate-50 border-slate-200'}`}>
+                                    <div className="text-[10px] font-bold text-slate-500 mb-1">{isRTL ? 'رقم الهوية / الإقامة' : 'National ID'}</div>
+                                    <div className={`font-mono font-black text-sm ${textMain}`}>{selectedMember.national_id}</div>
+                                </div>
+                                <div className={`p-4 rounded-2xl border ${isDark ? 'bg-slate-800/50 border-slate-700' : 'bg-slate-50 border-slate-200'}`}>
+                                    <div className="text-[10px] font-bold text-slate-500 mb-1 flex items-center gap-1"><Clock size={12}/> {isRTL ? 'العمر داخل الشركة' : 'Company Tenure'}</div>
+                                    <div className="font-black text-amber-600 text-sm">{getCompanyTenure(selectedMember.start_date)}</div>
+                                    <div className="text-[9px] font-bold text-slate-400 mt-1">تاريخ المباشرة: {selectedMember.start_date || 'N/A'}</div>
+                                </div>
+                                <div className={`p-4 rounded-2xl border ${isDark ? 'bg-slate-800/50 border-slate-700' : 'bg-slate-50 border-slate-200'}`}>
+                                    <div className="text-[10px] font-bold text-slate-500 mb-1 flex items-center gap-1"><Users size={12}/> {isRTL ? 'المدير المباشر' : 'Direct Manager'}</div>
+                                    <div className={`font-black text-sm ${textMain}`}>{selectedMember.manager_name}</div>
+                                </div>
+                                <div className={`col-span-2 p-4 rounded-2xl border flex items-center justify-between ${isDark ? 'bg-slate-800/50 border-slate-700' : 'bg-slate-50 border-slate-200'}`}>
+                                    <div>
+                                        <div className="text-[10px] font-bold text-slate-500 mb-1 flex items-center gap-1"><Building size={12}/> {isRTL ? 'موقع العمل (المنطقة والفرع)' : 'Work Location'}</div>
+                                        <div className={`font-black text-sm ${textMain}`}>{selectedMember.region} - {selectedMember.branch}</div>
                                     </div>
-
-                                    <div className={`px-4 py-2 rounded-xl flex items-center gap-2 border ${
-                                        member.performanceScore >= 80 ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:border-emerald-800' :
-                                        member.performanceScore >= 50 ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:border-amber-800' :
-                                        'bg-red-50 text-red-700 border-red-200 dark:bg-red-900/20 dark:border-red-800'
-                                    }`}>
-                                        {member.performanceScore >= 80 ? <TrendingUp size={16}/> : <TrendingDown size={16}/>}
-                                        <span className="font-black text-lg">{member.performanceScore}%</span>
-                                    </div>
+                                    <div className="w-10 h-10 bg-blue-100 text-blue-600 rounded-xl flex items-center justify-center"><MapPin size={20}/></div>
                                 </div>
                             </div>
-                        ))}
+
+                            <div className="pt-4 border-t border-slate-100 dark:border-slate-800">
+                                <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2"><Phone size={16}/> {isRTL ? 'طرق التواصل' : 'Contact Methods'}</h4>
+                                <div className="flex gap-3">
+                                    <a href={`tel:${selectedMember.phone}`} className="flex-1 p-3 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-xl flex items-center justify-center gap-2 font-bold text-sm transition">
+                                        <Phone size={16}/> اتصال مباشر
+                                    </a>
+                                    <a href={`mailto:${selectedMember.email}`} className="flex-1 p-3 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-xl flex items-center justify-center gap-2 font-bold text-sm transition">
+                                        <Mail size={16}/> إرسال بريد
+                                    </a>
+                                </div>
+                            </div>
+
+                        </div>
+
+                        {/* Left Column: Projects & 🚀 HR Actions History */}
+                        <div className="lg:col-span-5 space-y-6 border-t lg:border-t-0 lg:border-r border-slate-100 dark:border-slate-800 pt-8 lg:pt-0 lg:pr-8 rtl:lg:border-r-0 rtl:lg:border-l rtl:lg:pl-8 rtl:lg:pr-0">
+                            
+                            {/* 🚀 قسم سجل الإجراءات الإدارية الجديد */}
+                            <div>
+                                <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2"><FileSignature size={16}/> {isRTL ? 'السجل الإداري والتأديبي' : 'HR Actions History'}</h4>
+                                
+                                {selectedMember.actionHistory.length === 0 ? (
+                                    <div className="p-5 rounded-2xl bg-emerald-50 border border-emerald-100 text-center">
+                                        <CheckCircle2 size={24} className="mx-auto text-emerald-500 mb-2"/>
+                                        <p className="text-xs font-bold text-emerald-700">السجل نظيف. لم يتم اتخاذ أي إجراءات سابقة بحق الموظف.</p>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-3">
+                                        {selectedMember.actionHistory.map((action, idx) => (
+                                            <div key={idx} className={`p-4 rounded-xl border ${isDark ? 'bg-slate-800/50 border-slate-700' : 'bg-slate-50 border-slate-200'}`}>
+                                                <div className="flex justify-between items-start mb-2">
+                                                    <span className={`text-xs font-bold ${action.action_category === 'disciplinary' ? 'text-rose-600' : 'text-blue-600'}`}>{action.action_title}</span>
+                                                    <span className={`text-[9px] font-bold px-2 py-0.5 rounded ${action.status === 'Approved' ? 'bg-emerald-100 text-emerald-700' : action.status === 'Rejected' ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-700'}`}>{action.status}</span>
+                                                </div>
+                                                <div className="text-[10px] text-slate-500 font-mono mb-2">Ref: {action.reference_number} • {new Date(action.created_at).toLocaleDateString()}</div>
+                                                {action.status === 'Approved' && (
+                                                    <p className={`text-xs font-medium border-t pt-2 ${isDark ? 'border-slate-700 text-slate-400' : 'border-slate-200 text-slate-600'}`}>{action.reason}</p>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="pt-4 border-t border-slate-100 dark:border-slate-800">
+                                <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2"><Briefcase size={16}/> {isRTL ? 'المشاريع والتكليفات الحالية' : 'Current Projects'}</h4>
+                                {selectedMember.projects.length === 0 ? (
+                                    <div className="p-4 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 text-center text-sm font-bold text-slate-400">
+                                        لا يوجد مشاريع نشطة حالياً.
+                                    </div>
+                                ) : (
+                                    <div className="space-y-3">
+                                        {selectedMember.projects.map((proj, idx) => (
+                                            <div key={idx} className={`p-4 rounded-xl border flex items-center gap-3 ${isDark ? 'bg-slate-800/50 border-slate-700' : 'bg-white border-slate-200 shadow-sm'}`}>
+                                                <div className="w-8 h-8 bg-blue-100 text-blue-600 rounded-lg flex items-center justify-center"><Briefcase size={14}/></div>
+                                                <div className={`text-sm font-bold ${textMain}`}>{proj}</div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+
+                        </div>
                     </div>
                 </motion.div>
             </div>
@@ -445,67 +396,4 @@ export default function EnterpriseWorkforcePage() {
 
     </div>
   );
-}
-
-// --- Helper Components & Functions ---
-
-function StatCard({ label, value, sub, color, icon: Icon, isDark, onClick }: any) {
-    const colors: any = {
-        blue: isDark ? 'bg-blue-500/20 text-blue-400 border-blue-500/30' : 'bg-blue-50 text-blue-600 border-blue-100',
-        green: isDark ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' : 'bg-emerald-50 text-emerald-600 border-emerald-100',
-        amber: isDark ? 'bg-amber-500/20 text-amber-400 border-amber-500/30' : 'bg-amber-50 text-amber-600 border-amber-100',
-        red: isDark ? 'bg-red-500/20 text-red-400 border-red-500/30' : 'bg-red-50 text-red-600 border-red-100',
-        purple: isDark ? 'bg-purple-500/20 text-purple-400 border-purple-500/30 cursor-pointer hover:shadow-lg hover:-translate-y-1' : 'bg-purple-50 text-purple-600 border-purple-100 cursor-pointer hover:shadow-md hover:-translate-y-1',
-    };
-
-    return (
-        <div 
-            onClick={onClick}
-            className={`p-4 rounded-2xl border flex items-center justify-between transition-all ${isDark ? 'bg-slate-900/60 border-slate-800' : 'bg-white border-slate-200'} ${onClick ? (isDark ? 'hover:border-purple-500 cursor-pointer' : 'hover:border-purple-300 cursor-pointer shadow-sm hover:shadow-md') : ''}`}
-        >
-            <div>
-                <div className="flex items-baseline gap-1">
-                    <span className={`text-2xl font-black ${isDark ? 'text-white' : 'text-slate-800'}`}>{value}</span>
-                    <span className={`text-xs font-bold ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{sub}</span>
-                </div>
-                <div className={`text-[11px] font-bold uppercase tracking-wider mt-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{label}</div>
-            </div>
-            <div className={`p-3 rounded-xl border ${colors[color]}`}>
-                <Icon size={20} />
-            </div>
-        </div>
-    );
-}
-
-function FilterSelect({ label, isDark }: { label: string, isDark: boolean }) {
-    return (
-        <button className={`flex items-center gap-2 px-4 py-2 border rounded-xl text-xs font-bold transition ${isDark ? 'bg-slate-900 border-slate-700 text-slate-300 hover:bg-slate-800' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
-            {label} <ChevronDown size={14} />
-        </button>
-    );
-}
-
-function getStatusColor(status: AvailabilityStatus) {
-    switch (status) {
-        case 'Available': return 'bg-emerald-500';
-        case 'Assigned': return 'bg-blue-500';
-        case 'Overloaded': return 'bg-red-500';
-        case 'On Leave': return 'bg-slate-400';
-    }
-}
-
-function getStatusBadge(status: AvailabilityStatus, isDark: boolean) {
-    switch (status) {
-        case 'Available': return isDark ? 'bg-emerald-900/40 text-emerald-400 border-emerald-800' : 'bg-emerald-100 text-emerald-700 border-emerald-200';
-        case 'Assigned': return isDark ? 'bg-blue-900/40 text-blue-400 border-blue-800' : 'bg-blue-100 text-blue-700 border-blue-200';
-        case 'Overloaded': return isDark ? 'bg-red-900/40 text-red-400 border-red-800' : 'bg-red-100 text-red-700 border-red-200';
-        case 'On Leave': return isDark ? 'bg-slate-800 text-slate-400 border-slate-700' : 'bg-slate-100 text-slate-600 border-slate-300';
-    }
-}
-
-function getWorkloadColor(load: number) {
-    if (load >= 80) return 'bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.5)]';
-    if (load >= 50) return 'bg-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.5)]';
-    if (load > 0) return 'bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.5)]';
-    return 'bg-emerald-500';
 }

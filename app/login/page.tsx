@@ -26,6 +26,7 @@ export default function LoginPage() {
     try {
       let loginEmail = formData.identifier.trim();
 
+      // 1. البحث عن الإيميل إذا أدخل المستخدم اسم يوزر أو رقم جوال
       if (!loginEmail.includes('@')) {
         const res = await fetch('/api/auth/lookup', {
           method: 'POST',
@@ -37,9 +38,12 @@ export default function LoginPage() {
         
         if (res.ok && json.email) {
            loginEmail = json.email;
+        } else {
+           throw new Error('User not found');
         }
       }
 
+      // 2. تسجيل الدخول
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
         email: loginEmail,
         password: formData.password,
@@ -47,13 +51,24 @@ export default function LoginPage() {
 
       if (authError) throw authError;
 
-      const { data: profile } = await supabase
+      // 🔥 خطوة حرجة جداً: تحديث الراوتر لكي يقرأ الـ Middleware الكوكيز الجديدة
+      router.refresh();
+
+      // 3. جلب البروفايل لمعرفة الصلاحية والتوجيه الصحيح
+      const { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select('role')
         .eq('id', authData.user.id)
         .single();
 
-      // Corrected Routing Logic
+      if (profileError) {
+        console.error('خطأ في جلب البروفايل:', profileError);
+        // التوجيه الافتراضي في حال فشل جلب الصلاحية
+        router.push('/dashboard');
+        return;
+      }
+
+      // 4. التوجيه بناءً على المنصب
       if (profile?.role === 'technician') {
         router.push('/dashboard/technician');
       } else {
@@ -62,15 +77,15 @@ export default function LoginPage() {
 
     } catch (err: any) {
       console.error('Login Error:', err);
-      if (err.message?.includes('Invalid login credentials')) {
-        setError("Invalid credentials, please check your input.");
+      if (err.message?.includes('Invalid login credentials') || err.message === 'User not found') {
+        setError(isRTL ? "البيانات غير صحيحة، تأكد من المعرف وكلمة المرور." : "Invalid credentials, please check your input.");
       } else {
-        setError("System error, please try again.");
+        setError(isRTL ? "حدث خطأ في النظام، يرجى المحاولة لاحقاً." : "System error, please try again.");
       }
     } finally {
       setLoading(false);
     }
-  };
+};
 
   return (
     <div className={`min-h-screen bg-slate-50 flex items-center justify-center p-4 font-sans ${isRTL ? 'dir-rtl' : 'dir-ltr'}`}>
