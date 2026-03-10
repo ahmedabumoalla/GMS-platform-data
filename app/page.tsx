@@ -7,10 +7,11 @@ import {
   ArrowLeft, ArrowRight, Zap, Users, 
   LayoutDashboard, Phone, Globe, Activity,
   Sun, Moon, Briefcase, MapPin, ChevronDown, Eye, Target, Crosshair, Mail, Clock,
-  CheckCircle2, ShieldCheck, Timer, X, Facebook, Twitter, Instagram, Linkedin, Wrench
+  CheckCircle2, ShieldCheck, Timer, X, Facebook, Twitter, Instagram, Linkedin, 
+  Wrench, Scissors, Box, Layers, Hammer, Settings
 } from 'lucide-react';
 
-// --- مكونات مساعدة ---
+// --- مكونات مساعدة (كما هي لقوتها في التصميم) ---
 
 const SpotlightCard = ({ children, className = "", isDark }: any) => {
   const divRef = useRef<HTMLDivElement>(null);
@@ -66,7 +67,7 @@ const CinematicBackgroundLogo = ({ isDark }: { isDark: boolean }) => {
         y: (e.clientY - window.innerHeight / 2) / 50,
       });
     };
-    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mousemove', handleMouseMove, { passive: true });
     return () => window.removeEventListener('mousemove', handleMouseMove);
   }, []);
 
@@ -80,12 +81,12 @@ const CinematicBackgroundLogo = ({ isDark }: { isDark: boolean }) => {
         style={{ x: springX, y: springY }}
         className={`absolute top-1/2 left-1/2 w-[120vw] h-[120vh] -translate-x-1/2 -translate-y-1/2 flex items-center justify-center z-0 transition-opacity duration-1000 ${isDark ? 'opacity-[0.03]' : 'opacity-[0.015]'}`}
       >
-        <img src="/logo1.png" alt="GMS Background" className="w-full h-full object-contain filter blur-[2px]" />
+        {/* استخدمنا أيقونة كبيرة كخلفية سينمائية بدلاً من اللوجو المفقود */}
+        <Settings size={800} className="text-slate-500" />
       </motion.div>
     </div>
   );
 };
-
 
 export default function Home() {
   const [lang, setLang] = useState<'ar' | 'en' | 'ur'>('ar');
@@ -93,7 +94,7 @@ export default function Home() {
   const [scrolled, setScrolled] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [isLangOpen, setIsLangOpen] = useState(false);
-  const [selectedService, setSelectedService] = useState<any>(null); // State for Services Modal
+  const [selectedService, setSelectedService] = useState<any>(null);
 
   const toggleTheme = () => setIsDark(prev => !prev);
   const isRTL = lang === 'ar' || lang === 'ur';
@@ -104,125 +105,120 @@ export default function Home() {
     if (hour >= 18 || hour < 6) setIsDark(true);
     
     const handleScroll = () => setScrolled(window.scrollY > 50);
-    window.addEventListener('scroll', handleScroll);
+    window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
   const content = {
     ar: {
-      nav: { services: 'الخدمات', projects: 'المشاريع', whyUs: 'لماذا نحن', about: 'هويتنا', contact: 'تواصل معنا', portal: 'بوابة الموظفين', currentLang: 'العربية' },
+      nav: { services: 'خدماتنا', projects: 'معرض الأعمال', whyUs: 'لماذا نحن', about: 'عن الورشة', contact: 'اطلب تسعيرة', portal: 'دخول الموظفين', currentLang: 'العربية' },
       hero: {
-        badge: 'الكهرباء - الاتصالات - المقاولات العامة',
-        title1: 'شركة GMS للدعم والخدمات الفنية ',
-        desc: 'شركة GMS للخدمات الفنية هي شركة مقاولات تقنية متخصصة في مجالات الكهرباء والاتصالات والمقاولات العامة, نعمل بعقلية احترافية تضع الأنظمة والسلامة وجودة التنفيذ في مقدمة الأولويات بعيدا عن الحلول السريعة أو المختصرة, يتم تنفيذ أعمالنا وفق أسس منظمة ومتوافقة مع المعايير بما يضمن الاعتمادية والاستدامة على المدى الطويل نقدم خدماتنا للقطاعات السكنية والتجارية والصناعية لعملاء يبحثون عن تنفيذ تقني موثوق وتواصل واضح ومستوى عالٍ من المسؤولية في جميع مراحل المشروع.',
-        cta1: 'مشاريعنا الاستراتيجية', cta2: 'تواصل معنا',
+        badge: 'دقة متناهية - تقنية CNC - تشكيل المعادن',
+        title1: 'شركة أشكال وأكثر للتجارة',
+        desc: 'متخصصون في أعمال قص الحديد والمعادن باستخدام أحدث تقنيات الـ CNC والليزر. نقدم حلولاً متكاملة للواجهات المعمارية، الديكورات المعدنية، وأعمال الحدادة الفنية بدقة هندسية لا تضاهى لتلبية احتياجات المشاريع السكنية والتجارية والصناعية.',
+        cta1: 'تصفح أعمالنا', cta2: 'تواصل معنا الآن',
       },
       about: {
-        title: 'هويتنا ومبادئنا', subtitle: 'نبني أساسات المستقبل بخبرة واحترافية',
-        vision: { title: 'الرؤية', text: 'أن تكون GMS Technical Services شركة رائدة في تقديم الحلول التقنية والمقاولات المتكاملة في مجالات الكهرباء والاتصالات والبنية التحتية، من خلال تنفيذ مشاريع موثوقة وفق أعلى معايير الجودة والسلامة.' },
-        mission: { title: 'الرسالة', text: 'تقديم خدمات تقنية ومقاولات احترافية تعتمد على التنظيم والدقة والالتزام بالمعايير، مع ضمان تنفيذ موثوق وتواصل واضح يحقق قيمة حقيقية للعملاء في المشاريع السكنية والتجارية والصناعية.' },
-        goals: { title: 'الأهداف', text: 'تنفيذ المشاريع بكفاءة وجودة عالية وفق الأنظمة، بناء علاقات طويلة المدى مع العملاء، تقديم حلول تقنية حديثة تدعم البنية التحتية، والحفاظ على أعلى مستويات السلامة.' }
+        title: 'هويتنا ومبادئنا', subtitle: 'نحول الألواح المعدنية الصماء إلى تحف فنية',
+        vision: { title: 'الرؤية', text: 'أن نكون الخيار الأول والشركة الرائدة في المملكة لتنفيذ أعمال القص والتشكيل المعدني المبتكر بأعلى معايير الجودة العالمية.' },
+        mission: { title: 'الرسالة', text: 'تطويع الحديد وتشكيله بدقة عالية باستخدام التكنولوجيا الحديثة (CNC) لتقديم منتجات تجمع بين المتانة والجمال المعماري لعملائنا.' },
+        goals: { title: 'الأهداف', text: 'الدقة المتناهية في المقاسات، الالتزام التام بمواعيد التسليم، الابتكار المستمر في التصاميم المعدنية، وضمان أعلى درجات الأمان.' }
       },
       services: {
-        title: 'حلول متكاملة للبنية التحتية',
+        title: 'تخصصاتنا الفنية',
         items: [
           { 
-            title: 'الخدمات الكهربائية', shortDesc: 'حلول كهربائية متكاملة وأنظمة سلامة معتمدة ⚡', icon: Zap,
-            fullDesc: 'تقدم شركة GMS Technical Services حلوًلا كهربائية متكاملة تشمل المشاريع الجديدة وأعمال التحسين والتطوير إضافة إلى الصيانة المستمرة. يتم تنفيذ جميع الأعمال وفق معايير الجهات المختصة وأنظمة السلامة المعتمدة بما يشمل حساب الأحمال الكهربائية وأنظمة التأريض وحماية الدوائر الكهربائية والتوثيق الفني الكامل لضمان تشغيل آمن وموثوق على المدى الطويل.',
+            title: 'قص ليزر & CNC', shortDesc: 'قص بدقة ميكرومترية لجميع أنواع المعادن ⚙️', icon: Scissors,
+            fullDesc: 'نستخدم أحدث ماكينات الليزر والـ CNC لقص ألواح الحديد والاستانلس ستيل والنحاس. نضمن لك دقة متناهية في التفاصيل المعقدة والزخارف الإسلامية والهندسية للواجهات والأبواب.',
             bullets: [
-              'تمديد وإعادة تمديد الأسلاك الكهربائية للمشاريع السكنية والتجارية والصناعية',
-              'تركيب وتحديث لوحات التوزيع الرئيسية (DB) مع التنظيم ووضع الملصقات التعريفية',
-              'تقييم الأحمال الكهربائية وتحسين استهلاك الطاقة لمنع الأحمال الزائدة والتوقفات',
-              'أنظمة الإضاءة الداخلية والخارجية والمعمارية والصناعية',
-              'تركيب مخارج الكهرباء والمفاتيح ولوحات التحكم',
-              'تنفيذ أنظمة التأريض والربط الأرضي لضمان السلامة وكفاءة الأداء',
-              'كشف الأعطال الكهربائية ومعالجتها',
-              'توفير عقود صيانة كهربائية سنوية للمرافق والمباني'
+              'قص ألواح الحديد بسماكات مختلفة لتناسب كافة المشاريع',
+              'تنفيذ الزخارف الهندسية والنقوش الإسلامية الدقيقة',
+              'قص الاستانلس ستيل اللامع والمطفي للديكورات',
+              'إنتاج قطع الغيار الصناعية حسب المخططات الهندسية',
+              'تفريغ اللوحات الإعلانية واللوجوهات المعدنية للشركات'
             ]
           },
           { 
-            title: 'خدمات الاتصالات', shortDesc: 'بنية تحتية للاتصالات وأنظمة شبكات ذكية 🔌', icon: Globe,
-            fullDesc: 'تقدم شركة GMS Technical Services حلول اتصالات منظمة ومتكاملة تلبي متطلبات الاتصال الحديثة، مع التركيز على الأداء المستقر على المدى الطويل وتقليل التداخل وبناء بنية تحتية نظيفة ومنظمة تضمن كفاءة التشغيل وسهولة الإدارة والتوسع مستقبلاً.',
+            title: 'أعمال الحدادة الفنية', shortDesc: 'هياكل معدنية، أبواب، وسواتر بتصاميم عصرية 🔨', icon: Hammer,
+            fullDesc: 'فريق من الحدادين المهرة لتنفيذ كافة أعمال الحدادة التقليدية والمبتكرة، من حماية النوافذ إلى الهياكل الإنشائية الخفيفة، مع مراعاة أعلى معايير اللحام والمتانة.',
             bullets: [
-              'أنظمة الكوابل المنظمة (CAT6 و CAT6A مع جاهزية للألياف البصرية)',
-              'تركيب نقاط الشبكة وإنهاء التوصيلات (Network Termination)',
-              'تركيب رفوف الشبكات والكبائن (Data Racks & Cabinets)',
-              'أنظمة الهاتف والإنتركم',
-              'تمديدات البنية التحتية لكاميرات المراقبة (CCTV)',
-              'تمديدات وتركيب نقاط الواي فاي (Wi-Fi Access Points)',
-              'اختبار نقاط الشبكة وترقيمها وتوثيقها لضمان التنظيم وسهولة الصيانة'
+              'تصنيع وتركيب الأبواب الخارجية والمداخل الرئيسية الفخمة',
+              'تنفيذ الدرابزينات وسلالم الطوارئ الآمنة',
+              'تركيب سواتر ومظلات حديدية مدمجة مع قص الليزر',
+              'تصنيع الأثاث المعدني المودرن (طاولات، كراسي، رفوف)',
+              'أعمال اللحام التخصصي والتشطيب الخالي من العيوب'
             ]
           },
           { 
-            title: 'المقاولات العامة', shortDesc: 'تنسيق وتنفيذ مشاريع متكاملة باحترافية 🏗️', icon: Wrench,
-            fullDesc: 'تعمل شركة GMS Technical Services كمقاول عام موثوق للمشاريع التي تتطلب تنسيًقا بين عدة تخصصات وأعمال مختلفة، حيث نحرص على الالتزام بالجداول الزمنية وضمان جودة المواد ودقة التنفيذ الفني بما يتوافق مع أهداف المشروع ومتطلباته.',
+            title: 'الديكورات المعدنية', shortDesc: 'لمسات فنية من المعدن للديكور الداخلي والخارجي ✨', icon: Layers,
+            fullDesc: 'نصمم وننفذ قطع الديكور المعدنية التي تضفي فخامة على المكان، مثل القواطع (Partitions) الجدارية، تجليد الواجهات، وإطارات المرايا واللوحات الجمالية.',
             bullets: [
-              'أعمال التشطيبات للمشاريع السكنية والتجارية',
-              'تعديل وتجهيز المكاتب والمتاجر والمستودعات',
-              'أعمال الجبس بورد والقواطع والأسقف المستعارة',
-              'الإشراف على أعمال الأرضيات والبلاط والتشطيبات',
-              'دعم وتنسيق أعمال الأنظمة الميكانيكية والكهربائية والصحية (MEP)',
-              'تجهيز المواقع والإشراف الفني على التنفيذ',
-              'تنفيذ الأعمال المدنية والإنشائية البسيطة الداعمة للمشروع'
+              'قواطع داخلية (Partitions) لتقسيم المساحات المفتوحة',
+              'تجليد الحوائط والواجهات بالألواح المعدنية المزخرفة',
+              'تصميم وتصنيع إكسسوارات منزلية معدنية حسب الطلب',
+              'تنفيذ واجهات المحلات التجارية بالحديد المفرغ',
+              'معالجة المعادن وطلائها بألوان مقاومة للصدأ والعوامل الجوية'
             ]
           },
         ]
       },
       whyUs: {
-        title: 'لماذا تختار GMS؟',
-        subtitle: 'الدقة في حفظ السجلات والالتزام التام بالوقت',
-        commitmentTitle: 'الالتزام بالجودة والسلامة',
-        commitmentText: 'يتم بناء الجودة والسلامة في كل مشروع من خلال التخطيط، استخدام المواد المعتمدة، الفنيين المدربين، والتنفيذ الموثق. تعطي GMS Technical Services الأولوية لمنع المخاطر، موثوقية الأنظمة، والمسؤولية المهنية.',
+        title: 'لماذا تختارنا؟',
+        subtitle: 'تكنولوجيا متطورة، ويد عاملة خبيرة',
+        commitmentTitle: 'الجودة هي معيارنا الأساسي',
+        commitmentText: 'في شركة أشكال وأكثر، لا نكتفي بالقص فقط، بل نهتم بجودة الحواف، استقامة الألواح، ودقة المقاسات. نستخدم أفضل أنواع الحديد الخام ونضمن معالجة الأسطح ضد الصدأ لضمان استدامة المنتج لعشرات السنين.',
         stats: [
-            { num: '+1', label: 'سنوات خبرة' }, { num: '+20', label: 'مشروع ناجح' },
-            { num: '100%', label: 'التزام بالسلامة' }, { num: '100%', label: 'معدل رضا العملاء' }
+            { num: 'CNC', label: 'أحدث الماكينات' }, { num: '+500', label: 'تصميم هندسي جاهز' },
+            { num: '0.1mm', label: 'نسبة الخطأ' }, { num: '100%', label: 'رضا العملاء' }
         ],
         pillars: [
-            { title: 'دائماً في الموعد', desc: 'تواصل واضح وجداول زمنية واقعية. نركز دائماً على الجودة وإدارة الوقت.', icon: Clock },
-            { title: 'عمل جاد ومتقن', desc: 'الامتثال لمعايير السلامة والسلطات. تقديم عمل مخصص وعالي الجودة.', icon: ShieldCheck },
-            { title: 'متاحون 24/7', desc: 'استجابة سريعة وحلول طويلة المدى للمشاكل على مدار الساعة.', icon: Timer }
+            { title: 'دقة الـ CNC', desc: 'استخدام التكنولوجيا يضمن تطابق المنتج النهائي مع الرسم الهندسي بنسبة 100%.', icon: Settings },
+            { title: 'سرعة التنفيذ', desc: 'نلتزم بجداول زمنية صارمة لتسليم مشاريع المقاولات وطلبات الأفراد في الوقت المحدد.', icon: Timer },
+            { title: 'تنوع الخيارات', desc: 'مكتبة ضخمة من التصاميم والأشكال تناسب جميع الأذواق الكلاسيكية والمودرن.', icon: Box }
         ]
       },
       projects: {
-        title: 'أعمالنا ومشاريعنا', subtitle: 'لمحة عن المشاريع التي تفخر GMS بوضع بصمتها فيها',
+        title: 'معرض الأعمال', subtitle: 'نماذج من إبداعاتنا في قص وتشكيل المعادن',
         items: [
-          { name: 'مشروع تطوير البنية التحتية', cat: 'طاقة ومقاولات', loc: 'المنطقة الغربية', status: 'مكتمل', duration: '18 شهر', teams: '4 فرق متخصصة', desc: 'تم تنفيذ تمديدات شبكات الجهد العالي وفق أعلى معايير السلامة العالمية.', image: '/pic1.png' },
-          { name: 'تحديث شبكات الاتصالات', cat: 'اتصالات', loc: 'الرياض', status: 'قيد التنفيذ', duration: 'جاري العمل', teams: 'فريقين هندسيين', desc: 'إحلال وتجديد مسارات الألياف الضوئية وربط المحطات الرئيسية.', image: '/pic2.png' },
-          { name: 'صيانة المحطات الرئيسية', cat: 'عقود تشغيل', loc: 'الجبيل الصناعية', status: 'مستمر', duration: 'عقد سنوي', teams: 'فرق طوارئ', desc: 'تقديم خدمات الصيانة الوقائية والتشغيلية على مدار الساعة لضمان استمرارية الطاقة.', image: '/pic3.png' },
+          { name: 'واجهة فيلا مودرن', cat: 'قص ليزر', loc: 'الرياض', status: 'مكتمل', duration: '10 أيام', teams: 'فريق التركيب', desc: 'تجليد كامل لواجهة الفيلا بألواح حديد مقصوصة ليزر بنقوش عصرية ومطلية حرارياً.', image: '/pic1.png' },
+          { name: 'أبواب قصر خارجية', cat: 'حدادة وفن', loc: 'جدة', status: 'مكتمل', duration: '15 يوم', teams: 'فنيين لحام', desc: 'تصنيع أبواب ضخمة تجمع بين الحديد المشغول الكلاسيكي والتطعيم بقص الليزر.', image: '/pic2.png' },
+          { name: 'قواطع مكتبية ديكورية', cat: 'ديكور داخلي', loc: 'الدمام', status: 'قيد التنفيذ', duration: '7 أيام', teams: 'فريق الديكور', desc: 'تنفيذ قواطع داخلية من الاستانلس ستيل الذهبي لتقسيم مكاتب شركة كبرى.', image: '/pic3.png' },
         ]
       },
-      partners: { title: 'شركاء النجاح' },
-      contact: { title: 'نحن هنا لخدمتك', desc: 'سواء كنت تبحث عن استشارة هندسية أو تنفيذ مشروع متكامل، فريقنا جاهز للرد على استفساراتك.', call: 'المبيعات والدعم:', email: 'البريد الإلكتروني:' },
-      footer: { rights: '© 2026 GMS Technical Services. جميع الحقوق محفوظة.' }
+      partners: { title: 'شركاء النجاح والثقة' },
+      contact: { title: 'ابدأ مشروعك معنا', desc: 'أرسل لنا مخططك الهندسي أو فكرتك، وسيقوم فريقنا بتحويلها إلى واقع معدني ملموس بدقة عالية.', call: 'المبيعات والاستفسارات:', email: 'البريد الإلكتروني:' },
+      footer: { rights: '© 2026 شركة أشكال وأكثر للتجارة. جميع الحقوق محفوظة.' }
     },
     en: {
-      nav: { services: 'Services', projects: 'Projects', whyUs: 'Why Us', about: 'About', contact: 'Contact', portal: 'Portal', currentLang: 'English' },
-      hero: { badge: 'Electricity - Telecom - General Contracting', title1: 'GMS Technical Services & Support', desc: 'GMS Technical Services is a tech-contracting company specializing in electricity, telecom, and general contracting. We work with a professional mindset prioritizing systems, safety, and execution quality over quick fixes. Our work is executed based on organized foundations and compliant with standards to ensure long-term reliability and sustainability for residential, commercial, and industrial sectors.', cta1: 'Our Projects', cta2: 'Contact Us' },
-      about: { title: 'Our Identity & Principles', subtitle: 'Building foundations of the future with expertise', vision: { title: 'Vision', text: 'To be a leading company providing technical solutions and integrated contracting in electricity, telecom, and infrastructure by executing reliable projects.' }, mission: { title: 'Mission', text: 'Providing professional technical and contracting services based on organization, accuracy, and standards adherence, ensuring reliable execution and clear communication.' }, goals: { title: 'Goals', text: 'Executing projects efficiently, building long-term client relationships, providing modern technical solutions, and maintaining the highest levels of safety.' } },
+      // تم تغيير portal إلى "Staff Login"
+      nav: { services: 'Services', projects: 'Portfolio', whyUs: 'Why Us', about: 'About', contact: 'Get Quote', portal: 'Staff Login', currentLang: 'English' },
+      hero: { badge: 'High Precision - CNC Tech - Metal Forming', title1: 'Ashkal & More Trading Co.', desc: 'Specializing in metal and iron cutting using the latest CNC and Laser technologies. We provide integrated solutions for architectural facades, metal decorations, and artistic blacksmithing with unmatched precision.', cta1: 'View Portfolio', cta2: 'Contact Us Now' },
+      about: { title: 'Our Identity', subtitle: 'Transforming solid metal into artistic masterpieces', vision: { title: 'Vision', text: 'To be the leading company in Saudi Arabia for innovative metal cutting and forming with the highest global quality standards.' }, mission: { title: 'Mission', text: 'Shaping iron with high precision using modern CNC tech to deliver products combining durability and beauty.' }, goals: { title: 'Goals', text: 'Extreme dimensional accuracy, strict commitment to delivery times, continuous innovation, and safety assurance.' } },
       services: {
-        title: 'Integrated Infrastructure Solutions',
+        title: 'Our Technical Specialties',
         items: [
-          { title: 'Electrical Services', shortDesc: 'Complete electrical solutions & approved safety systems ⚡', icon: Zap, fullDesc: 'GMS Technical Services offers integrated electrical solutions including new projects, upgrades, and continuous maintenance. All work complies with authority standards and safety regulations, including load calculations, grounding, circuit protection, and full technical documentation.', bullets: ['Wiring and rewiring for residential, commercial, and industrial projects', 'Installing and upgrading main Distribution Boards (DB)', 'Electrical load assessment and power consumption optimization', 'Indoor, outdoor, architectural, and industrial lighting systems', 'Installing electrical outlets, switches, and control panels', 'Executing grounding and earthing systems for safety and efficiency', 'Detecting and resolving electrical faults', 'Providing annual electrical maintenance contracts'] },
-          { title: 'Telecom Services', shortDesc: 'Telecom infrastructure & smart network systems 🔌', icon: Globe, fullDesc: 'GMS Technical Services provides organized telecom solutions meeting modern communication needs, focusing on long-term stable performance, minimizing interference, and building clean infrastructure for operational efficiency and future scalability.', bullets: ['Structured cabling systems (CAT6 & CAT6A with Fiber Optic readiness)', 'Network point installation and termination', 'Installing Data Racks & Cabinets', 'Telephone and Intercom systems', 'Infrastructure wiring for CCTV', 'Installing Wi-Fi Access Points', 'Testing, numbering, and documenting network points for easy maintenance'] },
-          { title: 'General Contracting', shortDesc: 'Executing integrated projects with professionalism 🏗️', icon: Wrench, fullDesc: 'GMS Technical Services acts as a reliable general contractor for projects requiring coordination between multiple disciplines, adhering to timelines and ensuring material quality and precise technical execution aligned with project goals.', bullets: ['Finishing works for residential and commercial projects', 'Modifying and preparing offices, stores, and warehouses', 'Gypsum board, partitions, and suspended ceilings works', 'Supervising flooring, tiling, and finishing works', 'Supporting and coordinating MEP systems', 'Site preparation and technical execution supervision', 'Executing simple civil and structural works supporting the project'] }
+          { title: 'Laser & CNC Cutting', shortDesc: 'Micrometric precision cutting for all metals ⚙️', icon: Scissors, fullDesc: 'Using the latest Laser and CNC machines for cutting iron, stainless steel, and copper. We guarantee extreme precision in complex details and geometric patterns.', bullets: ['Cutting iron plates of various thicknesses', 'Executing intricate geometric and Islamic patterns', 'Cutting glossy and matte stainless steel', 'Producing industrial parts based on blueprints', 'Creating metal signs and corporate logos'] },
+          { title: 'Artistic Blacksmithing', shortDesc: 'Metal structures, doors, and modern fences 🔨', icon: Hammer, fullDesc: 'A team of skilled blacksmiths for traditional and innovative works, from window protections to light structural frames, ensuring top welding standards.', bullets: ['Manufacturing luxurious exterior doors and entrances', 'Executing safe handrails and fire escapes', 'Installing laser-cut integrated fences', 'Manufacturing modern metal furniture', 'Specialized welding and flawless finishing'] },
+          { title: 'Metal Decorations', shortDesc: 'Artistic metal touches for interior and exterior ✨', icon: Layers, fullDesc: 'Designing and executing metal decor pieces that add luxury to spaces, such as wall partitions, facade cladding, and aesthetic frames.', bullets: ['Interior partitions for open spaces', 'Wall cladding with decorative metal panels', 'Custom-made metal home accessories', 'Commercial storefronts with hollowed iron', 'Anti-rust metal treatment and painting'] }
         ]
       },
-      whyUs: { title: 'Why Choose GMS?', subtitle: 'Accurate Record Keeping and Always On Time', commitmentTitle: 'Commitment To Quality & Safety', commitmentText: 'Quality and safety are built into every project through planning, approved materials, trained technicians, and documented execution. GMS prioritizes risk prevention, system reliability, and professional accountability.', stats: [{ num: '8+', label: 'Years Experience' }, { num: '140+', label: 'Projects Completed' }, { num: '100%', label: 'Safety Compliant' }, { num: '95%', label: 'Client Retention' }], pillars: [{ title: 'Always On Time', desc: 'Clear communication and realistic timelines. Always focused on quality.', icon: Clock }, { title: 'Hard Working', desc: 'Compliance with safety standards. Delivering high quality work.', icon: ShieldCheck }, { title: '24/7 Availability', desc: 'Long-term reliability over short-term fixes. Fast 24/7 response.', icon: Timer }] },
-      projects: { title: 'Our Portfolio', subtitle: 'A glimpse of the projects GMS is proud to execute', items: [{ name: 'Infrastructure Dev Project', cat: 'Power & Contracting', loc: 'Western Region', status: 'Completed', duration: '18 Months', teams: '4 Spec. Teams', desc: 'Executed HV network cabling according to international safety standards.', image: '/pic1.png' }, { name: 'Telecom Network Upgrade', cat: 'Telecom', loc: 'Riyadh', status: 'Ongoing', duration: 'In Progress', teams: '2 Eng. Teams', desc: 'Replacing fiber optic routes and connecting main substations.', image: '/pic2.png' }, { name: 'Main Substation Maintenance', cat: 'O&M Contracts', loc: 'Jubail Industrial', status: 'Continuous', duration: 'Annual Contract', teams: 'Emergency Teams', desc: 'Providing 24/7 preventative and operational maintenance services.', image: '/pic3.png' }] },
-      partners: { title: 'Our Success Partners' },
-      contact: { title: 'We are here to serve you', desc: 'Whether you need engineering consultation or full project execution, our team is ready.', call: 'Sales & Support:', email: 'Email:' },
-      footer: { rights: '© 2026 GMS Technical Services. All rights reserved.' }
+      whyUs: { title: 'Why Choose Us?', subtitle: 'Advanced Tech & Expert Hands', commitmentTitle: 'Quality is Our Standard', commitmentText: 'At Ashkal & More, we do not just cut; we care about edge quality, plate straightness, and size accuracy. We use premium raw iron and guarantee anti-rust surface treatments.', stats: [{ num: 'CNC', label: 'Latest Machines' }, { num: '500+', label: 'Ready Designs' }, { num: '0.1mm', label: 'Error Margin' }, { num: '100%', label: 'Client Satisfaction' }], pillars: [{ title: 'CNC Precision', desc: 'Technology ensures the final product matches the drawing 100%.', icon: Settings }, { title: 'Fast Execution', desc: 'Strict timelines for delivering contracting and individual projects.', icon: Timer }, { title: 'Diverse Options', desc: 'A massive library of designs for classic and modern tastes.', icon: Box }] },
+      projects: { title: 'Our Portfolio', subtitle: 'A glimpse of our creations in metal cutting', items: [{ name: 'Modern Villa Facade', cat: 'Laser Cut', loc: 'Riyadh', status: 'Completed', duration: '10 Days', teams: 'Installation Team', desc: 'Full facade cladding with laser-cut iron panels with modern patterns.', image: '/pic1.png' }, { name: 'Palace Exterior Doors', cat: 'Blacksmithing', loc: 'Jeddah', status: 'Completed', duration: '15 Days', teams: 'Welding Techs', desc: 'Huge doors combining classic wrought iron with laser-cut inserts.', image: '/pic2.png' }, { name: 'Decorative Partitions', cat: 'Interior Decor', loc: 'Dammam', status: 'Ongoing', duration: '7 Days', teams: 'Decor Team', desc: 'Golden stainless steel partitions for a major corporate office.', image: '/pic3.png' }] },
+      partners: { title: 'Partners in Success' },
+      contact: { title: 'Start Your Project', desc: 'Send us your blueprint or idea, and our team will turn it into a tangible metal reality with high precision.', call: 'Sales & Inquiries:', email: 'Email:' },
+      footer: { rights: '© 2026 Ashkal & More Trading Co. All rights reserved.' }
     },
     ur: {
-      nav: { services: 'خدمات', projects: 'منصوبے', whyUs: 'ہم کیوں', about: 'ہمارے بارے میں', contact: 'رابطہ کریں', portal: 'پورٹل', currentLang: 'اردو' },
-      hero: { badge: 'بجلی - ٹیلی کام - جنرل کنٹریکٹنگ', title1: 'GMS ٹیکنیکل سروسز', desc: 'GMS ٹیکنیکل سروسز ایک ٹیک کنٹریکٹنگ کمپنی ہے جو بجلی، ٹیلی کام، اور جنرل کنٹریکٹنگ میں مہارت رکھتی ہے۔ ہم ایک پیشہ ورانہ ذہنیت کے ساتھ کام کرتے ہیں۔', cta1: 'ہمارے منصوبے', cta2: 'رابطہ کریں' },
-      about: { title: 'ہماری شناخت اور اصول', subtitle: 'مہارت کے ساتھ مستقبل کی بنیادیں بنانا', vision: { title: 'نقطہ نظر', text: 'ایک سرکردہ کمپنی بننا۔' }, mission: { title: 'مشن', text: 'پیشہ ورانہ تکنیکی خدمات فراہم کرنا۔' }, goals: { title: 'مقاصد', text: 'منصوبوں کو مؤثر طریقے سے انجام دینا۔' } },
-      services: { title: 'بنیادی ڈھانچے کے حل', items: [{ title: 'الیکٹریکل سروسز', shortDesc: 'مکمل برقی حل ⚡', icon: Zap, fullDesc: 'الیکٹریکل نیٹ ورکس کی تنصیب اور ترقی۔', bullets: ['وائرنگ', 'پینل بورڈز', 'لائٹنگ'] }, { title: 'ٹیلی کام سروسز', shortDesc: 'اسمارٹ نیٹ ورک سسٹمز 🔌', icon: Globe, fullDesc: 'ٹیلی کام انفراسٹرکچر کا انتظام۔', bullets: ['نیٹ ورک کیبلنگ', 'CCTV', 'Wi-Fi'] }, { title: 'جنرل کنٹریکٹنگ', shortDesc: 'پروجیکٹ کا انتظام 🏗️', icon: Wrench, fullDesc: 'قابل اعتماد جنرل کنٹریکٹر۔', bullets: ['تزئین و آرائش', 'دفتر کی تیاری'] }] },
-      whyUs: { title: 'GMS کیوں؟', subtitle: 'درست ریکارڈ اور وقت کی پابندی', commitmentTitle: 'معیار اور حفاظت سے وابستگی', commitmentText: 'ہر پروجیکٹ میں معیار کو یقینی بنایا جاتا ہے۔', stats: [{ num: '8+', label: 'سال کا تجربہ' }, { num: '140+', label: 'مکمل منصوبے' }, { num: '100%', label: 'حفاظت' }, { num: '95%', label: 'کلائنٹ کی برقراری' }], pillars: [{ title: 'وقت پر', desc: 'ہمیشہ وقت پر کام کی تکمیل', icon: Clock }, { title: 'محنت کش', desc: 'اعلی معیار کا کام', icon: ShieldCheck }, { title: '24/7 دستیابی', desc: 'ہر وقت مدد کے لیے تیار', icon: Timer }] },
-      projects: { title: 'ہمارے منصوبے', subtitle: 'ان منصوبوں کی ایک جھلک جن پر GMS کو فخر ہے', items: [{ name: 'انفراسٹرکچر ڈیولپمنٹ', cat: 'پاور کنٹریکٹنگ', loc: 'مغربی علاقہ', status: 'مکمل', duration: '18 ماہ', teams: '4 ٹیمیں', desc: 'ایچ وی نیٹ ورک کیبلنگ کو انجام دیا۔', image: '/pic1.png' }, { name: 'ٹیلی کام نیٹ ورک اپ گریڈ', cat: 'ٹیلی کمیونیکیشن', loc: 'ریاض', status: 'جاری', duration: 'جاری ہے', teams: '2 ٹیمیں', desc: 'فائبر آپٹک روٹس کو تبدیل کرنا۔', image: '/pic2.png' }, { name: 'مین سب اسٹیشن مینٹیننس', cat: 'O&M معاہدے', loc: 'جبیل', status: 'مسلسل', duration: 'سالانہ معاہدہ', teams: 'ایمرجنسی ٹیمیں', desc: 'دیکھ بھال کی خدمات۔', image: '/pic3.png' }] },
-      partners: { title: 'ہمارے پارٹنرز' },
-      contact: { title: 'ہم آپ کی خدمت کے لیے حاضر ہیں', desc: 'ہماری ٹیم آپ کے سوالات کے جواب دینے کے لیے تیار ہے۔', call: 'کال کریں:', email: 'ای میل:' },
-      footer: { rights: '© 2026 GMS Technical Services. جملہ حقوق محفوظ ہیں۔' }
+      // تم تغيير portal إلى "اسٹاف لاگ ان"
+      nav: { services: 'خدمات', projects: 'پورٹ فولیو', whyUs: 'ہم کیوں', about: 'ہمارے بارے میں', contact: 'رابطہ کریں', portal: 'اسٹاف لاگ ان', currentLang: 'اردو' },
+      hero: { badge: 'اعلی درستگی - CNC ٹیکنالوجی - دھاتی تشکیل', title1: 'اشکال اینڈ مور ٹریڈنگ کو', desc: 'جدید ترین CNC اور لیزر ٹیکنالوجی کا استعمال کرتے ہوئے دھات اور لوہے کی کٹائی میں مہارت۔ ہم آرکیٹیکچرل اگواڑے اور دھاتی سجاوٹ کے لیے حل فراہم کرتے ہیں۔', cta1: 'پورٹ فولیو دیکھیں', cta2: 'ابھی رابطہ کریں' },
+      about: { title: 'ہماری شناخت', subtitle: 'ٹھوس دھات کو آرٹ میں تبدیل کرنا', vision: { title: 'نقطہ نظر', text: 'سعودی عرب میں دھاتی کٹائی کے لیے معروف کمپنی بننا۔' }, mission: { title: 'مشن', text: 'اعلی درستگی کے ساتھ لوہے کو شکل دینا۔' }, goals: { title: 'مقاصد', text: 'درستگی، وقت کی پابندی، اور جدت۔' } },
+      services: { title: 'ہماری تکنیکی خصوصیات', items: [{ title: 'لیزر اور CNC کٹنگ', shortDesc: 'دھاتوں کے لیے مائیکرو میٹرک درستگی ⚙️', icon: Scissors, fullDesc: 'ہم لوہے اور سٹیل کو کاٹنے کے لیے جدید ترین CNC مشینیں استعمال کرتے ہیں۔', bullets: ['مختلف موٹائی کی کٹائی', 'ہندسی اور اسلامی ڈیزائن', 'پرزوں کی تیاری'] }, { title: 'آرٹسٹک بلیک اسمتھنگ', shortDesc: 'دھاتی ڈھانچے اور جدید دروازے 🔨', icon: Hammer, fullDesc: 'ہمارے ہنر مند لوہار روایتی اور جدید کاموں کے لیے تیار ہیں۔', bullets: ['بیرونی دروازے بنانا', 'حفاظتی ریلنگ', 'دھاتی فرنیچر'] }, { title: 'دھاتی سجاوٹ', shortDesc: 'اندرونی اور بیرونی سجاوٹ ✨', icon: Layers, fullDesc: 'ہم دھاتی ڈیکوریشن کے ٹکڑے ڈیزائن کرتے ہیں جو جگہ میں خوبصورتی کا اضافہ کرتے ہیں۔', bullets: ['اندرونی پارٹیشنز', 'دھاتی پینلز سے دیوار کی سجاوٹ', 'حسب ضرورت لوازمات'] }] },
+      whyUs: { title: 'ہمیں کیوں منتخب کریں؟', subtitle: 'جدید ٹیکنالوجی اور ماہر ہاتھ', commitmentTitle: 'معیار ہمارا معیار ہے', commitmentText: 'ہم صرف کاٹتے نہیں ہیں؛ ہم کناروں کے معیار اور سائز کی درستگی کا خیال رکھتے ہیں۔', stats: [{ num: 'CNC', label: 'جدید مشینیں' }, { num: '500+', label: 'تیار ڈیزائن' }, { num: '0.1mm', label: 'غلطی کا مارجن' }, { num: '100%', label: 'گاہک کا اطمینان' }], pillars: [{ title: 'CNC کی درستگی', desc: 'پروڈکٹ ڈرائنگ سے 100% میل کھاتا ہے۔', icon: Settings }, { title: 'تیز تکمیل', desc: 'منصوبوں کی بروقت فراہمی۔', icon: Timer }, { title: 'متنوع اختیارات', desc: 'کلاسک اور جدید ذوق کے لیے ڈیزائن۔', icon: Box }] },
+      projects: { title: 'ہمارا پورٹ فولیو', subtitle: 'دھات کی کٹائی میں ہماری تخلیقات کی ایک جھلک', items: [{ name: 'جدید ولا کا اگواڑا', cat: 'لیزر کٹ', loc: 'ریاض', status: 'مکمل', duration: '10 دن', teams: 'انسٹالیشن ٹیم', desc: 'لیزر کٹ لوہے کے پینلز کے ساتھ مکمل اگواڑا۔', image: '/pic1.png' }, { name: 'محل کے بیرونی دروازے', cat: 'بلیک اسمتھنگ', loc: 'جدہ', status: 'مکمل', duration: '15 دن', teams: 'ویلڈنگ ٹیم', desc: 'لیزر کٹ کے ساتھ کلاسک لوہے کے بڑے دروازے۔', image: '/pic2.png' }, { name: 'آرائشی پارٹیشنز', cat: 'اندرونی سجاوٹ', loc: 'دمام', status: 'جاری', duration: '7 دن', teams: 'ڈیکور ٹیم', desc: 'ایک کارپوریٹ دفتر کے لیے گولڈن سٹینلیس سٹیل پارٹیشنز۔', image: '/pic3.png' }] },
+      partners: { title: 'کامیابی کے شراکت دار' },
+      contact: { title: 'اپنا پروجیکٹ شروع کریں', desc: 'ہمیں اپنا بلیو پرنٹ بھیجیں، ہماری ٹیم اسے دھاتی حقیقت میں بدل دے گی۔', call: 'پوچھ گچھ:', email: 'ای میل:' },
+      footer: { rights: '© 2026 اشکال اینڈ مور ٹریڈنگ کو۔ جملہ حقوق محفوظ ہیں۔' }
     }
   };
   
@@ -239,11 +235,19 @@ export default function Home() {
       {/* --- Navbar --- */}
       <motion.nav 
         initial={{ y: -100 }} animate={{ y: 0 }} transition={{ duration: 0.5 }}
-        className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${scrolled ? 'h-20 bg-opacity-90 backdrop-blur-xl border-b shadow-sm' : 'h-28 bg-transparent border-transparent'} ${isDark ? 'border-slate-800 bg-slate-950/80' : 'border-slate-200 bg-white/80'}`}
+        className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${scrolled ? 'h-20 bg-opacity-90 backdrop-blur-xl border-b shadow-sm' : 'h-24 bg-transparent border-transparent'} ${isDark ? 'border-slate-800 bg-slate-950/80' : 'border-slate-200 bg-white/80'}`}
       >
         <div className="max-w-7xl mx-auto px-6 h-full flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-4 group z-10">
-            <img src="/logo1.png" className="h-16 md:h-20 w-auto object-contain transition-transform duration-300 group-hover:scale-105" alt="GMS Logo" />
+          <Link href="/login" className="flex items-center gap-4 group z-10">
+            {/* اللوجو النصي الاحترافي لشركة أشكال وأكثر */}
+            <div className="flex flex-col">
+               <span className={`text-2xl font-black tracking-tighter leading-none ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                 ASHKAL <span className="text-blue-600">& MORE</span>
+               </span>
+               <span className={`text-[10px] font-bold tracking-widest ${isDark ? 'text-slate-400' : 'text-slate-500'} ${isRTL ? 'text-right' : 'text-left'}`}>
+                 TRADING CO.
+               </span>
+            </div>
           </Link>
           <div className="hidden lg:flex items-center gap-8 font-bold text-sm z-10">
             <Link href="#about" className={`hover:text-blue-500 transition ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>{c.nav.about}</Link>
@@ -273,8 +277,8 @@ export default function Home() {
               </AnimatePresence>
             </div>
             <Link href="/login" className={`hidden md:flex items-center gap-2 px-6 py-2.5 rounded-full font-bold text-xs transition-all shadow-lg ${isDark ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-slate-900 text-white hover:bg-slate-800'}`}>
-              <LayoutDashboard size={16} /> <span className="hidden xl:inline">{c.nav.portal}</span>
-            </Link>
+  <LayoutDashboard size={16} /> <span className="hidden xl:inline">{c.nav.portal}</span>
+</Link>
           </div>
         </div>
       </motion.nav>
@@ -289,7 +293,7 @@ export default function Home() {
                 <span className="text-[10px] font-black tracking-widest uppercase">{c.hero.badge}</span>
               </div>
             </FadeIn>
-            <motion.h1 initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.8, delay: 0.2 }} className={`text-5xl md:text-6xl lg:text-7xl font-black tracking-tighter mb-6 leading-[1.1] ${isDark ? 'text-white' : 'text-slate-900'}`}>
+            <motion.h1 initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.8, delay: 0.2 }} className={`text-4xl md:text-5xl lg:text-6xl font-black tracking-tighter mb-6 leading-[1.2] ${isDark ? 'text-white' : 'text-slate-900'}`}>
               {c.hero.title1}
             </motion.h1>
             <FadeIn delay={0.4}>
@@ -309,14 +313,15 @@ export default function Home() {
             </FadeIn>
           </div>
 
-          {/* 🖼️ صورة الفني */}
+          {/* 🖼️ صورة تعبيرية عن الـ CNC والحديد */}
           <motion.div
             initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 1, delay: 0.5, ease: "easeOut" }}
-            className="flex items-end justify-center lg:justify-end relative group h-full z-10 hover:z-20"
+            className="flex items-center justify-center lg:justify-end relative group h-full z-10 hover:z-20"
           >
-            <div className={`absolute w-full h-full top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full blur-[120px] opacity-30 ${isDark ? 'bg-blue-600' : 'bg-blue-300'} z-0`}></div>
-            <div className="relative z-10 transition-transform duration-500 group-hover:scale-105 [mask-image:linear-gradient(to_bottom,black_80%,transparent_100%)] -mb-1 tracking-normal leading-none flex items-end block">
-              <img src="/technician.png" alt="GMS Expert Technician" className="w-full max-w-[350px] md:max-w-[450px] lg:max-w-[550px] h-auto object-contain drop-shadow-[0_35px_35px_rgba(59,130,246,0.2)] block" />
+            <div className={`absolute w-[400px] h-[400px] top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full blur-[80px] opacity-30 ${isDark ? 'bg-blue-600' : 'bg-blue-300'} z-0`}></div>
+            {/* أيقونة جمالية ضخمة ترمز لقص الليزر حتى يتم توفير صورة الماكينة الحقيقية */}
+            <div className="relative z-10 p-10 border-4 border-dashed border-blue-500/30 rounded-full animate-[spin_60s_linear_infinite]">
+                 <Scissors size={200} className={`transform -rotate-45 ${isDark ? 'text-blue-400/80' : 'text-blue-600/80'}`} />
             </div>
           </motion.div>
         </div>
@@ -428,7 +433,7 @@ export default function Home() {
               <div className="max-w-7xl mx-auto px-6">
                   <div className="grid lg:grid-cols-2 gap-16 items-center mb-16">
                       <FadeIn direction="right">
-                          <span className={`text-xs font-bold uppercase tracking-widest mb-4 block ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>Why Choose Me</span>
+                          <span className={`text-xs font-bold uppercase tracking-widest mb-4 block ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>Why Choose Us</span>
                           <h2 className={`text-3xl md:text-5xl font-black mb-6 leading-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>{c.whyUs.subtitle}</h2>
                           <p className={`text-lg font-medium leading-relaxed mb-8 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>{c.whyUs.commitmentText}</p>
                       </FadeIn>
@@ -510,9 +515,9 @@ export default function Home() {
                   <FadeIn>
                       <h3 className={`text-sm font-black uppercase tracking-widest mb-10 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{c.partners.title}</h3>
                       <div className="flex flex-wrap justify-center items-center gap-12 md:gap-24 opacity-70">
-                          {/* 👈 أضف صور شركاء النجاح هنا وضعها في مجلد public */}
-                          <img src="/haif.png" alt="Haif Company" className="h-16 md:h-20 w-auto object-contain grayscale hover:grayscale-0 transition-all duration-300 hover:scale-105" />
-                          <img src="/sec.png" alt="Saudi Electricity Company" className="h-16 md:h-20 w-auto object-contain grayscale hover:grayscale-0 transition-all duration-300 hover:scale-105" />
+                          {/* 👈 أضف صور شركاء النجاح الخاصة بالورشة هنا */}
+                          <img src="/partner1.png" alt="Partner 1" className="h-16 md:h-20 w-auto object-contain grayscale hover:grayscale-0 transition-all duration-300 hover:scale-105" />
+                          <img src="/partner2.png" alt="Partner 2" className="h-16 md:h-20 w-auto object-contain grayscale hover:grayscale-0 transition-all duration-300 hover:scale-105" />
                       </div>
                   </FadeIn>
               </div>
@@ -528,18 +533,18 @@ export default function Home() {
                       <h2 className={`text-3xl md:text-5xl font-black mb-6 ${isDark ? 'text-white' : 'text-slate-900'} relative z-10`}>{c.contact.title}</h2>
                       <p className={`text-lg mb-10 font-medium ${isDark ? 'text-slate-400' : 'text-slate-600'} relative z-10`}>{c.contact.desc}</p>
                       <div className="flex flex-col md:flex-row items-center justify-center gap-6 relative z-20 hover:z-30">
-                          <a href="tel:+966574253172" className={`flex items-center gap-4 p-5 rounded-2xl border transition-all hover:-translate-y-1 shadow-sm hover:shadow-lg w-full md:w-auto ${isDark ? 'bg-slate-900 border-slate-700 hover:border-blue-500' : 'bg-white border-slate-200 hover:border-blue-400'} z-10 relative`}>
+                          <a href="tel:+966000000000" className={`flex items-center gap-4 p-5 rounded-2xl border transition-all hover:-translate-y-1 shadow-sm hover:shadow-lg w-full md:w-auto ${isDark ? 'bg-slate-900 border-slate-700 hover:border-blue-500' : 'bg-white border-slate-200 hover:border-blue-400'} z-10 relative`}>
                               <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-xl flex items-center justify-center z-10 relative shrink-0"><Phone size={24}/></div>
                               <div className="text-start relative z-10 overflow-hidden">
                                   <div className="text-[10px] font-bold text-slate-500 mb-1 z-10 relative">{c.contact.call}</div>
-                                  <div className={`font-black text-lg md:text-xl font-mono truncate ${textMain} z-10 relative`} dir="ltr">+966 57 425 3172</div>
+                                  <div className={`font-black text-lg md:text-xl font-mono truncate ${textMain} z-10 relative`} dir="ltr">+966 XX XXX XXXX</div>
                               </div>
                           </a>
-                          <a href="mailto:gm@gmstechnicalservices.com" className={`flex items-center gap-4 p-5 rounded-2xl border transition-all hover:-translate-y-1 shadow-sm hover:shadow-lg w-full md:w-auto ${isDark ? 'bg-slate-900 border-slate-700 hover:border-blue-500' : 'bg-white border-slate-200 hover:border-blue-400'} z-10 relative`}>
+                          <a href="mailto:info@ashkal.com" className={`flex items-center gap-4 p-5 rounded-2xl border transition-all hover:-translate-y-1 shadow-sm hover:shadow-lg w-full md:w-auto ${isDark ? 'bg-slate-900 border-slate-700 hover:border-blue-500' : 'bg-white border-slate-200 hover:border-blue-400'} z-10 relative`}>
                               <div className="w-12 h-12 bg-blue-100 text-blue-600 rounded-xl flex items-center justify-center z-10 relative shrink-0"><Mail size={24}/></div>
                               <div className="text-start relative z-10 overflow-hidden">
                                   <div className="text-[10px] font-bold text-slate-500 mb-1 z-10 relative">{c.contact.email}</div>
-                                  <div className={`font-black text-sm md:text-base font-mono truncate ${textMain} z-10 relative`}>gm@gmstechnicalservices.com</div>
+                                  <div className={`font-black text-sm md:text-base font-mono truncate ${textMain} z-10 relative`}>info@ashkal.com</div>
                               </div>
                           </a>
                       </div>
@@ -551,7 +556,7 @@ export default function Home() {
           <footer className={`py-12 border-t ${isDark ? 'bg-slate-950 border-slate-900' : 'bg-white border-slate-100'} relative z-10`}>
             <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-6 relative z-10">
               <div className="flex items-center gap-3 relative z-10">
-                <img src="/logo1.png" alt="GMS" className="h-10 w-auto grayscale hover:grayscale-0 transition-all opacity-70 hover:opacity-100 z-10 relative" />
+                <span className={`text-lg font-black tracking-tighter ${isDark ? 'text-white' : 'text-slate-900'}`}>ASHKAL & MORE</span>
                 <span className={`font-bold text-xs ${isDark ? 'text-slate-500' : 'text-slate-400'} z-10 relative`}>{c.footer.rights}</span>
               </div>
               

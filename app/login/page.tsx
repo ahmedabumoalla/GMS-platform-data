@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { 
   Lock, UserCircle, ArrowRight, Loader2, Globe, 
-  ChevronLeft, ChevronRight, ShieldCheck, AlertCircle 
+  ChevronLeft, ChevronRight, ShieldCheck, AlertCircle, Settings
 } from 'lucide-react';
 
 export default function LoginPage() {
@@ -51,7 +51,6 @@ export default function LoginPage() {
 
       if (authError) throw authError;
 
-      // 🔥 خطوة حرجة جداً: تحديث الراوتر لكي يقرأ الـ Middleware الكوكيز الجديدة
       router.refresh();
 
       // 3. جلب البروفايل لمعرفة الصلاحية والتوجيه الصحيح
@@ -63,7 +62,6 @@ export default function LoginPage() {
 
       if (profileError) {
         console.error('خطأ في جلب البروفايل:', profileError);
-        // التوجيه الافتراضي في حال فشل جلب الصلاحية
         router.push('/dashboard');
         return;
       }
@@ -105,9 +103,9 @@ export default function LoginPage() {
           </div>
 
           <div className="mb-8">
-            <h3 className="text-3xl font-black text-slate-900 mb-2">{isRTL ? 'تسجيل الدخول' : 'Sign In'}</h3>
+            <h3 className="text-3xl font-black text-slate-900 mb-2">{isRTL ? 'دخول الموظفين' : 'Staff Login'}</h3>
             <p className="text-slate-500 text-sm">
-                {isRTL ? 'أدخل بياناتك للوصول إلى لوحة التحكم' : 'Enter your credentials to access the dashboard'}
+                {isRTL ? 'أدخل بياناتك للوصول إلى نظام إدارة الإنتاج' : 'Enter your credentials to access the production system'}
             </p>
           </div>
 
@@ -120,16 +118,16 @@ export default function LoginPage() {
 
           <form onSubmit={handleLogin} className="space-y-5">
             <div className="space-y-2">
-              <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">{isRTL ? 'المعرف (إيميل / جوال / يوزر)' : 'Identifier'}</label>
+              <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">{isRTL ? 'المعرف (إيميل / يوزر)' : 'Identifier'}</label>
               <div className="relative group">
-                <UserCircle className="absolute top-3.5 h-5 w-5 text-slate-400 group-focus-within:text-blue-600 transition ltr:left-4 rtl:right-4" />
+                <UserCircle className={`absolute top-3.5 h-5 w-5 text-slate-400 group-focus-within:text-blue-600 transition ${isRTL ? 'right-4' : 'left-4'}`} />
                 <input 
                   required 
                   type="text" 
                   value={formData.identifier}
                   onChange={(e) => setFormData({...formData, identifier: e.target.value})}
                   className={`w-full py-3 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition font-bold text-black placeholder:font-normal placeholder:text-slate-400 ${isRTL ? 'pr-12 pl-4' : 'pl-12 pr-4'}`}
-                  placeholder={isRTL ? "name@company.com / 05xxxxxxxx" : "Email, Phone, or Username"} 
+                  placeholder={isRTL ? "البريد الإلكتروني أو اسم المستخدم" : "Email or Username"} 
                 />
               </div>
             </div>
@@ -137,10 +135,9 @@ export default function LoginPage() {
             <div className="space-y-2">
               <div className="flex justify-between items-center">
                 <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">{isRTL ? 'كلمة المرور' : 'Password'}</label>
-                <a href="#" className="text-xs text-blue-600 hover:text-blue-800 font-bold">{isRTL ? 'نسيت كلمة المرور؟' : 'Forgot Password?'}</a>
               </div>
               <div className="relative group">
-                <Lock className="absolute top-3.5 h-5 w-5 text-slate-400 group-focus-within:text-blue-600 transition ltr:left-4 rtl:right-4" />
+                <Lock className={`absolute top-3.5 h-5 w-5 text-slate-400 group-focus-within:text-blue-600 transition ${isRTL ? 'right-4' : 'left-4'}`} />
                 <input 
                   required 
                   type="password" 
@@ -172,11 +169,17 @@ export default function LoginPage() {
         {/* --- Left Side (Logo and Welcome) --- */}
         <div className="w-full md:w-5/12 bg-slate-900 relative flex flex-col justify-between p-10 text-white overflow-hidden">
           <div className="absolute top-0 right-0 w-64 h-64 bg-blue-600/20 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
-          <div className="absolute bottom-0 left-0 w-64 h-64 bg-emerald-600/10 rounded-full blur-3xl translate-y-1/2 -translate-x-1/2"></div>
+          <div className="absolute bottom-0 left-0 w-64 h-64 bg-blue-900/40 rounded-full blur-3xl translate-y-1/2 -translate-x-1/2"></div>
           
           <div className="relative z-10 h-full flex flex-col justify-center items-center text-center">
-            <div className="mb-8 p-4 bg-white/5 rounded-3xl backdrop-blur-sm border border-white/10 shadow-2xl">
-                <img src="/logo1.png" alt="GMS Logo" className="w-32 h-auto object-contain drop-shadow-md" />
+            {/* استبدال اللوجو المفقود بشعار نصي احترافي لـ "أشكال وأكثر" */}
+            <div className="mb-8 p-6 bg-white/5 rounded-3xl backdrop-blur-md border border-white/10 shadow-2xl flex flex-col items-center">
+               <span className="text-3xl font-black tracking-tighter leading-none text-white">
+                 ASHKAL <span className="text-blue-500">& MORE</span>
+               </span>
+               <span className="text-[10px] font-bold tracking-[0.3em] text-slate-400 mt-2 uppercase">
+                 Trading Company
+               </span>
             </div>
 
             <h2 className="text-3xl font-black mb-4 leading-tight">
@@ -184,14 +187,14 @@ export default function LoginPage() {
             </h2>
             <p className="text-slate-300 text-sm leading-relaxed max-w-xs mx-auto opacity-90">
               {isRTL 
-                ? 'منصة GMS المتكاملة لإدارة الموارد والعمليات. نتمنى لك يوم عمل مثمر.' 
-                : 'GMS Integrated Platform for Resource and Operations Management. Have a productive day.'}
+                ? 'نظام أشكال وأكثر المتكامل لإدارة الإنتاج والعمليات المعدنية. نتمنى لك يوم عمل مثمر.' 
+                : 'Ashkal & More Integrated System for Metal Production and Operations. Have a productive day.'}
             </p>
           </div>
 
           <div className="relative z-10 text-xs text-slate-500 flex items-center justify-center gap-2 mt-auto">
-            <ShieldCheck size={14} className="text-emerald-500"/>
-            <span>{isRTL ? 'بوابة دخول آمنة ومراقبة' : 'Secure & Monitored Gateway'}</span>
+            <ShieldCheck size={14} className="text-blue-500"/>
+            <span>{isRTL ? 'بوابة دخول الموظفين المعتمدة' : 'Official Staff Access Gateway'}</span>
           </div>
         </div>
 
