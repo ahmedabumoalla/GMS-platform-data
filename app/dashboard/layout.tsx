@@ -2,20 +2,20 @@
 
 import React, { useState, createContext, useContext, useEffect, useMemo, useRef } from 'react';
 import Link from 'next/link';
+import Script from 'next/script';
 import { usePathname, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { 
   Users, MapPin, DollarSign, LogOut, Bell, Shield, 
   ChevronLeft, LayoutDashboard, PlusCircle, Share2, ListChecks, 
-  Calendar, Box, GitPullRequest, Inbox, CheckSquare, 
-  Video, Folder, TrendingUp, Target, Receipt, Banknote, 
+  Box, Inbox, Folder, Target, Receipt, Banknote, 
   Sun, Moon, Globe, Briefcase, Settings, 
-  BookOpen, ReceiptText, ShieldCheck, Loader2, List,
+  BookOpen, ReceiptText, Loader2, List,
   HardDrive, LayoutGrid, ChevronDown, CheckCircle2,
   LifeBuoy, Send, X, Building2, FileSignature, 
   ShoppingCart, PackageOpen, Truck, Landmark, CreditCard, 
   FilePlus, FileSpreadsheet, WalletCards,
-  ArrowRight
+  ArrowRight, CheckSquare
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -70,6 +70,16 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [showHelpModal, setShowHelpModal] = useState(false);
   const [ticketData, setTicketData] = useState({ subject: '', message: '', urgency: 'Normal' });
   const [isSubmittingTicket, setIsSubmittingTicket] = useState(false);
+
+  // دالة تشغيل ترجمة قوقل الفورية
+  const triggerGoogleTranslate = (targetLang: 'ar' | 'en') => {
+    const select = document.querySelector('.goog-te-combo') as HTMLSelectElement;
+    if (select) {
+        select.value = targetLang;
+        select.dispatchEvent(new Event('change'));
+    }
+    setLang(targetLang); 
+  };
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -139,22 +149,17 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         logout: 'تسجيل الخروج', headerTitle: 'نظام إدارة الموارد GMS', allApps: 'كل التطبيقات',
         menu: {
             sys: 'إدارة النظام', main: 'الرئيسية', users: 'المستخدمين', track: 'التتبع المباشر',
-            proj: 'المشاريع والمهام', proj_list: 'قائمة المشاريع', new_task: 'إنشاء مشروع جديد', assign: 'توزيع المهام', progress: 'الإنجاز', timeline: 'الجدول الزمني', team: 'فريق العمل',
-            subcontractors: 'المقاولين الرئيسيين',
-            ops: 'العمليات', workflow: 'سير العمل', requests: 'الطلبات', quality: 'الجودة',
-            comm: 'التواصل والملفات', meet: 'الاجتماعات', vault: 'خزنة الملفات', notif: 'الإشعارات',
-            perf: 'التقارير والأداء', prod: 'الإنتاجية', kpi: 'مؤشرات الأداء', boards: 'اللوحات', hr_actions: 'سجل القرارات والإجراءات',
+            proj: 'المشاريع والمهام', proj_list: 'قائمة المشاريع', new_task: 'إنشاء مشروع جديد', assign: 'توزيع المهام', team: 'فريق العمل', subcontractors: 'المقاولين الرئيسيين', requests: 'الطلبات', notif: 'الإشعارات',
             settings: 'الإعدادات', appManager: 'إدارة التطبيقات',
-            // 🚀 القاموس المالي الذكي (ERP Finance) 🚀
             fin_sales: 'المبيعات', fin_sales_new: 'إنشاء فاتورة مبيعات', fin_sales_list: 'عرض فواتير المبيعات', fin_quotes_new: 'إنشاء عرض سعر', fin_quotes_list: 'مراجعة عروض الأسعار',
             fin_inventory: 'المخزون', fin_inv_mgr: 'إدارة المخزون', fin_inv_issue: 'طلب صرف إذن مخزني',
             fin_clients: 'العملاء', fin_client_bal: 'أرصدة العملاء', fin_client_list: 'قائمة العملاء',
             fin_purchases: 'المشتريات', fin_purch_new: 'إنشاء فاتورة مشتريات', fin_purch_list: 'عرض فواتير المشتريات',
             fin_suppliers: 'الموردين', fin_supp_bal: 'أرصدة الموردين', fin_supp_list: 'قائمة الموردين',
-            fin_transactions: 'المعاملات المالية', fin_treasury: 'الخزينة والصندوق', fin_je_list: 'شجرة الحسابات', fin_je_new: 'إنشاء قيد يومية جديد', fin_voucher_out: 'سند صرف', fin_voucher_in: 'سند قبض', fin_payroll: 'مسيرات الرواتب', fin_clearances: 'المستخلصات المالية', fin_contracts: 'العقود الحالية',
+            fin_transactions: 'المعاملات المالية', fin_treasury: 'الخزينة والصندوق', fin_je_list: 'شجرة الحسابات', fin_je_new: 'إنشاء قيد يومية جديد', fin_voucher_out: 'سند صرف', fin_voucher_in: 'سند قبض', fin_payroll: 'مسيرات الرواتب', fin_clearances: 'المستخلصات المالية', fin_contracts: 'العقود الحالية', vault: 'خزنة الملفات', hr_actions: 'سجل القرارات والإجراءات',
             fin_expenses: 'المصروفات', fin_exp_new: 'إضافة مصروفات جديدة', fin_exp_list: 'عرض المصروفات', fin_exp_req: 'طلبات الصرف الجديدة'
         },
-        apps: { all: 'الكل', ops: 'العمليات والمشاريع', fin: 'المالية والحسابات', comm: 'التواصل والمستندات', sys: 'النظام والإعدادات' },
+        apps: { all: 'الكل', ops: 'العمليات والمشاريع', fin: 'المالية والحسابات', sys: 'النظام والإعدادات' },
         help: { title: 'مركز المساعدة', subject: 'العنوان', message: 'الوصف', urgency: 'الأهمية', low: 'عادية', normal: 'متوسطة', high: 'عاجلة', cancel: 'إلغاء', submit: 'إرسال' },
         notifications: { title: 'الإشعارات', empty: 'لا توجد إشعارات', viewAll: 'عرض الكل' }
     },
@@ -162,22 +167,17 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         logout: 'Logout', headerTitle: 'GMS ERP System', allApps: 'All Apps',
         menu: {
             sys: 'System Admin', main: 'Dashboard', users: 'Users', track: 'Live Tracking',
-            proj: 'Projects', proj_list: 'Projects List', new_task: 'New Task', assign: 'Assign', progress: 'Progress', timeline: 'Timeline', team: 'Team',
-            subcontractors: 'Subcontractors',
-            ops: 'Operations', workflow: 'Workflow', requests: 'Requests', quality: 'Quality',
-            comm: 'Comms & Files', meet: 'Meetings', vault: 'Data Vault', notif: 'Notifications',
-            perf: 'Reports', prod: 'Productivity', kpi: 'KPIs', boards: 'Dashboards', hr_actions: 'HR Actions Log',
+            proj: 'Projects', proj_list: 'Projects List', new_task: 'New Task', assign: 'Assign', team: 'Team', subcontractors: 'Subcontractors', requests: 'Requests', notif: 'Notifications',
             settings: 'Settings', appManager: 'App Manager',
-            // 🚀 ERP Finance Dictionary 🚀
             fin_sales: 'Sales', fin_sales_new: 'New Sales Invoice', fin_sales_list: 'Sales Invoices', fin_quotes_new: 'New Quotation', fin_quotes_list: 'Review Quotations',
             fin_inventory: 'Inventory', fin_inv_mgr: 'Inventory Management', fin_inv_issue: 'Stock Issue Request',
             fin_clients: 'Clients', fin_client_bal: 'Client Balances', fin_client_list: 'Clients List',
             fin_purchases: 'Purchases', fin_purch_new: 'New Purchase Invoice', fin_purch_list: 'Purchase Invoices',
             fin_suppliers: 'Suppliers', fin_supp_bal: 'Supplier Balances', fin_supp_list: 'Suppliers List',
-            fin_transactions: 'Financial Transactions', fin_treasury: 'Treasury & Cash', fin_je_list: 'Journal Entries', fin_je_new: 'New Journal Entry', fin_voucher_out: 'Payment Voucher', fin_voucher_in: 'Receipt Voucher', fin_payroll: 'Payroll', fin_clearances: 'Financial Clearances', fin_contracts: 'Current Contracts',
+            fin_transactions: 'Financial Transactions', fin_treasury: 'Treasury & Cash', fin_je_list: 'Journal Entries', fin_je_new: 'New Journal Entry', fin_voucher_out: 'Payment Voucher', fin_voucher_in: 'Receipt Voucher', fin_payroll: 'Payroll', fin_clearances: 'Financial Clearances', fin_contracts: 'Current Contracts', vault: 'Data Vault', hr_actions: 'HR Actions Log',
             fin_expenses: 'Expenses', fin_exp_new: 'Add New Expense', fin_exp_list: 'View Expenses', fin_exp_req: 'New Expense Requests'
         },
-        apps: { all: 'All Apps', ops: 'Operations & Projects', fin: 'Finance', comm: 'Comms & DMS', sys: 'System & Settings' },
+        apps: { all: 'All Apps', ops: 'Operations & Projects', fin: 'Finance', sys: 'System & Settings' },
         help: { title: 'Support', subject: 'Subject', message: 'Message', urgency: 'Urgency', low: 'Low', normal: 'Normal', high: 'High', cancel: 'Cancel', submit: 'Submit' },
         notifications: { title: 'Notifications', empty: 'No notifications', viewAll: 'View All' }
     }
@@ -205,37 +205,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           ...( ['super_admin', 'admin'].includes(userRole) ? [{ label: currentT.menu.new_task, href: '/dashboard/projects/create', icon: <PlusCircle size={18} /> }] : [] ),
           { label: currentT.menu.subcontractors, href: '/dashboard/subcontractors', icon: <Building2 size={18} /> },
           { label: currentT.menu.assign, href: '/dashboard/projects/assign', icon: <Share2 size={18} /> },
-          { label: currentT.menu.progress, href: '/dashboard/projects/progress', icon: <ListChecks size={18} /> },
-          { label: currentT.menu.timeline, href: '/dashboard/projects/timeline', icon: <Calendar size={18} /> },
           { label: currentT.menu.team, href: '/dashboard/projects/team', icon: <Users size={18} /> },
-        ]
-      },
-      {
-        title: currentT.menu.ops, pluginKey: 'operations', appKey: 'ops', icon: <GitPullRequest size={20} />, allowedRoles: ['super_admin', 'admin', 'project_manager'],
-        items: [
-          { label: currentT.menu.workflow, href: '/dashboard/operations/workflow', icon: <GitPullRequest size={18} /> },
           { label: currentT.menu.requests, href: '/dashboard/operations/requests', icon: <Inbox size={18} /> },
-          { label: currentT.menu.quality, href: '/dashboard/operations/quality', icon: <CheckSquare size={18} /> },
-        ]
-      },
-      {
-        title: currentT.menu.comm, pluginKey: 'comms', appKey: 'comm', icon: <Folder size={20} />, allowedRoles: ['super_admin', 'admin', 'project_manager', 'engineer'],
-        items: [
           { label: currentT.menu.notif, href: '/dashboard/communication/notifications', icon: <Bell size={18} /> },
-          { label: currentT.menu.meet, href: '/dashboard/communication/meetings', icon: <Video size={18} /> },
-          { label: currentT.menu.vault, href: '/dashboard/communication/files', icon: <HardDrive size={18} /> },
         ]
       },
-      {
-        title: currentT.menu.perf, pluginKey: 'core', appKey: 'sys', icon: <TrendingUp size={20} />, allowedRoles: ['super_admin', 'admin', 'project_manager'],
-        items: [
-          { label: currentT.menu.prod, href: '/dashboard/reports/productivity', icon: <TrendingUp size={18} /> },
-          { label: currentT.menu.kpi, href: '/dashboard/reports/kpi', icon: <Target size={18} /> },
-          { label: currentT.menu.boards, href: '/dashboard/reports/dashboards', icon: <LayoutDashboard size={18} /> },
-          { label: currentT.menu.hr_actions, href: '/dashboard/reports/hr-actions', icon: <FileSignature size={18} /> },
-        ]
-      },
-      // 🚀 القائمة المالية الذكية (ERP Level) 🚀
       {
         title: currentT.menu.fin_sales, pluginKey: 'finance', appKey: 'fin', icon: <ShoppingCart size={20} />, allowedRoles: finRoles,
         items: [
@@ -284,6 +258,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           { label: currentT.menu.fin_payroll, href: '/dashboard/finance/payroll', icon: <Users size={18} /> },
           { label: currentT.menu.fin_clearances, href: '/dashboard/finance/clearances', icon: <CheckSquare size={18} /> },
           { label: currentT.menu.fin_contracts, href: '/dashboard/finance/contracts', icon: <Briefcase size={18} /> },
+          { label: currentT.menu.vault, href: '/dashboard/finance/files', icon: <HardDrive size={18} /> },
+          { label: currentT.menu.hr_actions, href: '/dashboard/finance/hr-actions', icon: <FileSignature size={18} /> },
         ]
       },
       {
@@ -315,7 +291,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       { id: 'all', label: currentT.apps.all, icon: <LayoutGrid size={18}/>, color: 'text-blue-500' },
       { id: 'ops', label: currentT.apps.ops, icon: <Briefcase size={18}/>, color: 'text-blue-500', reqPlugin: 'operations' },
       { id: 'fin', label: currentT.apps.fin, icon: <DollarSign size={18}/>, color: 'text-emerald-500', reqPlugin: 'finance' },
-      { id: 'comm', label: currentT.apps.comm, icon: <Folder size={18}/>, color: 'text-purple-500', reqPlugin: 'comms' },
       { id: 'sys', label: currentT.apps.sys, icon: <Settings size={18}/>, color: 'text-slate-500', reqPlugin: 'core' },
   ].filter(app => !app.reqPlugin || app.reqPlugin === 'core' || activePlugins.includes(app.reqPlugin));
 
@@ -394,7 +369,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         </aside>
         
         <div className="flex-1 flex flex-col h-screen overflow-hidden relative">
-          <header className={`h-20 flex justify-between items-center px-8 shadow-sm flex-shrink-0 backdrop-blur-md border-b z-30 transition-colors duration-300 ${headerBg}`}>
+          <header className={`h-20 flex justify-between items-center px-8 shadow-sm shrink-0 backdrop-blur-md border-b z-30 transition-colors duration-300 ${headerBg}`}>
             <h2 className={`text-xl font-bold hidden sm:block ${textMain}`}>{appOptions.find(a => a.id === currentApp)?.label}</h2>
             <div className="flex items-center gap-4 ml-auto rtl:mr-auto rtl:ml-0">
               
@@ -449,7 +424,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               <button onClick={toggleTheme} className={`p-2 rounded-full transition ${isDark ? 'bg-slate-800 text-yellow-400 hover:bg-slate-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
                 {isDark ? <Sun size={18}/> : <Moon size={18}/>}
               </button>
-              <button onClick={toggleLang} className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-bold transition border ${isDark ? 'bg-slate-800 border-slate-700 text-slate-300' : 'bg-slate-100 border-slate-200 text-slate-600'}`}>
+              
+              {/* --- زر تغيير اللغة وربطه بمترجم قوقل --- */}
+              <button 
+                  onClick={() => triggerGoogleTranslate(lang === 'ar' ? 'en' : 'ar')} 
+                  className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-bold transition border ${isDark ? 'bg-slate-800 border-slate-700 text-slate-300' : 'bg-slate-100 border-slate-200 text-slate-600'}`}
+              >
                 <Globe size={16}/> {lang === 'ar' ? 'EN' : 'عربي'}
               </button>
               
@@ -460,7 +440,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                       <div className={`text-sm font-bold ${textMain}`}>{user?.full_name}</div>
                       <div className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{user?.job_title || user?.role}</div>
                   </div>
-                  <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-blue-700 rounded-full text-white flex items-center justify-center font-bold shadow-md uppercase border-2 border-white/20">
+                  <div className="w-10 h-10 bg-linear-to-br from-blue-600 to-blue-700 rounded-full text-white flex items-center justify-center font-bold shadow-md uppercase border-2 border-white/20">
                     {user?.full_name?.charAt(0) || 'U'}
                   </div>
               </div>
@@ -475,7 +455,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
       <AnimatePresence>
         {showHelpModal && (
-            <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+            <div className="fixed inset-0 z-100 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
                 <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }} className={`w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden border ${isDark ? 'bg-slate-900 border-slate-700' : 'bg-white border-white'}`}>
                     <div className={`p-5 border-b flex justify-between items-center ${isDark ? 'border-slate-800 bg-slate-800/30' : 'border-slate-100 bg-slate-50'}`}>
                         <h3 className={`font-bold text-lg flex items-center gap-2 ${isDark ? 'text-white' : 'text-slate-900'}`}><LifeBuoy className="text-blue-500" /> {currentT.help.title}</h3>
@@ -500,7 +480,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
                         <div className={`pt-5 mt-2 border-t flex gap-3 ${isDark ? 'border-slate-800' : 'border-slate-100'}`}>
                             <button type="button" onClick={() => setShowHelpModal(false)} className={`flex-1 py-3 rounded-xl font-bold text-sm transition border ${isDark ? 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700' : 'bg-white border-slate-300 text-slate-600 hover:bg-slate-50'}`}>{currentT.help.cancel}</button>
-                            <button type="submit" disabled={isSubmittingTicket} className="flex-[2] py-3 bg-blue-600 text-white rounded-xl font-bold text-sm hover:bg-blue-700 shadow-lg shadow-blue-500/20 transition flex items-center justify-center gap-2 disabled:opacity-50">
+                            <button type="submit" disabled={isSubmittingTicket} className="flex-2 py-3 bg-blue-600 text-white rounded-xl font-bold text-sm hover:bg-blue-700 shadow-lg shadow-blue-500/20 transition flex items-center justify-center gap-2 disabled:opacity-50">
                                 {isSubmittingTicket ? <Loader2 size={18} className="animate-spin"/> : <Send size={18}/>} {currentT.help.submit}
                             </button>
                         </div>
@@ -509,6 +489,43 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             </div>
         )}
       </AnimatePresence>
+
+      {/* --- 🚀 محرك ترجمة قوقل المخفي --- */}
+      <div id="google_translate_element" className="hidden opacity-0 w-0 h-0 pointer-events-none"></div>
+      
+      <Script src="https://translate.google.com/translate_a/element.js?cb=googleTranslateElementInit" strategy="afterInteractive" />
+      <Script id="google-translate-init" strategy="afterInteractive">
+        {`
+          function googleTranslateElementInit() {
+            new google.translate.TranslateElement({
+                pageLanguage: 'ar',
+                includedLanguages: 'ar,en',
+                autoDisplay: false
+            }, 'google_translate_element');
+          }
+        `}
+      </Script>
+      
+      {/* إخفاء شريط قوقل العلوي المزعج نهائياً بالـ CSS */}
+      <style dangerouslySetInnerHTML={{__html: `
+        /* إخفاء الشريط العلوي */
+        .skiptranslate > iframe, .goog-te-banner-frame, .VIpgJd-ZVi9od-ORHb-OEVmcd { display: none !important; }
+        body { top: 0 !important; position: static !important; }
+        
+        /* 🚀 إخفاء مربع النص الأصلي (التولتيب) عند تمرير الماوس 🚀 */
+        #goog-gt-tt, .goog-te-balloon-frame, div#goog-gt-tt { 
+            display: none !important; 
+            opacity: 0 !important; 
+            visibility: hidden !important; 
+        }
+        
+        /* إخفاء تأثير التظليل المزعج للخلفية عند تمرير الماوس على النص المترجم */
+        .VIpgJd-yAWNEb-hvhgNd-l4eHX-MSRH6d, font { 
+            background-color: transparent !important; 
+            box-shadow: none !important; 
+        }
+      `}} />
+
     </DashboardContext.Provider>
   );
 }

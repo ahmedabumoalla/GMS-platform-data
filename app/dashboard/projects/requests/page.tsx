@@ -250,7 +250,7 @@ export default function TechnicianRequestsInboxPage() {
                 {loading ? (
                     <div className="flex justify-center py-32"><Loader2 className="animate-spin text-blue-600" size={50} /></div>
                 ) : filteredProjects.length === 0 ? (
-                    <div className="text-center py-32 border-2 border-dashed border-slate-300 rounded-[2rem]">
+                    <div className="text-center py-32 border-2 border-dashed border-slate-300 rounded-4xl">
                         <Inbox size={48} className="mx-auto text-slate-300 mb-4"/>
                         <div className={`font-black text-xl ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{text.empty}</div>
                     </div>
@@ -260,7 +260,7 @@ export default function TechnicianRequestsInboxPage() {
                             <motion.div 
                                 initial={{opacity:0, y:20}} animate={{opacity:1, y:0}} key={proj.id} 
                                 onClick={() => setSelectedProject(proj)}
-                                className={`cursor-pointer rounded-[2rem] border transition-all duration-300 relative overflow-hidden hover:shadow-2xl hover:-translate-y-1 group ${proj.isHR ? (isDark ? 'bg-rose-950/30 border-rose-800' : 'bg-rose-50 border-rose-200') : cardBg}`}
+                                className={`cursor-pointer rounded-4xl border transition-all duration-300 relative overflow-hidden hover:shadow-2xl hover:-translate-y-1 group ${proj.isHR ? (isDark ? 'bg-rose-950/30 border-rose-800' : 'bg-rose-50 border-rose-200') : cardBg}`}
                             >
                                 {proj.pendingCount > 0 && (
                                     <div className="absolute top-0 left-0 w-full h-1.5 bg-red-500"></div>
@@ -297,7 +297,7 @@ export default function TechnicianRequestsInboxPage() {
             {/* --- 🚀 THE BEAUTIFUL REQUEST MODAL --- */}
             <AnimatePresence>
                 {selectedProject && (
-                    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/80 backdrop-blur-md p-4 sm:p-8 overflow-y-auto" onClick={() => setSelectedProject(null)}>
+                    <div className="fixed inset-0 z-100 flex items-center justify-center bg-slate-950/80 backdrop-blur-md p-4 sm:p-8 overflow-y-auto" onClick={() => setSelectedProject(null)}>
                         <motion.div 
                             initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }} 
                             className={`w-full max-w-4xl rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[90vh] ${isDark ? 'bg-slate-900 border border-slate-700' : 'bg-slate-50'}`}
@@ -331,7 +331,7 @@ export default function TechnicianRequestsInboxPage() {
                                                              'bg-amber-100 text-amber-700 border-amber-200 animate-pulse';
 
                                         return (
-                                            <div key={req.id} className={`p-6 rounded-[2rem] border-2 transition-all shadow-sm ${needsAction ? ui.border : (isDark ? 'border-slate-800 bg-slate-900' : 'border-slate-200 bg-white')}`}>
+                                            <div key={req.id} className={`p-6 rounded-4xl border-2 transition-all shadow-sm ${needsAction ? ui.border : (isDark ? 'border-slate-800 bg-slate-900' : 'border-slate-200 bg-white')}`}>
                                                 
                                                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
                                                     <div className="flex items-center gap-4">
@@ -446,7 +446,7 @@ export default function TechnicianRequestsInboxPage() {
 
                                                 {needsAction && (
                                                     <div className="mt-4 flex gap-3">
-                                                        <button onClick={() => handleAction(req, 'Approved')} disabled={processingId === req.id} className="flex-[2] py-3.5 bg-slate-900 dark:bg-emerald-600 text-white rounded-xl text-sm font-black shadow-xl hover:shadow-2xl hover:-translate-y-0.5 transition flex items-center justify-center gap-2 disabled:opacity-50">
+                                                        <button onClick={() => handleAction(req, 'Approved')} disabled={processingId === req.id} className="flex-2 py-3.5 bg-slate-900 dark:bg-emerald-600 text-white rounded-xl text-sm font-black shadow-xl hover:shadow-2xl hover:-translate-y-0.5 transition flex items-center justify-center gap-2 disabled:opacity-50">
                                                             {processingId === req.id ? <Loader2 size={18} className="animate-spin"/> : <CheckCircle2 size={18}/>}
                                                             {text.approve}
                                                         </button>

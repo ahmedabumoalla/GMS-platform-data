@@ -295,7 +295,7 @@ export default function HRActionsLogPage() {
                 ) : filteredActions.length === 0 ? (
                     <div className="text-center py-20 font-bold text-slate-500">{text.empty}</div>
                 ) : (
-                    <div className={`rounded-[2rem] border overflow-hidden shadow-sm ${cardBg}`}>
+                    <div className={`rounded-4xl border overflow-hidden shadow-sm ${cardBg}`}>
                         <div className="overflow-x-auto">
                             <table className={`w-full text-sm ${isRTL ? 'text-right' : 'text-left'} whitespace-nowrap`}>
                                 <thead className={`text-xs uppercase font-black text-slate-500 border-b ${isDark ? 'bg-slate-800/50 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
@@ -372,7 +372,7 @@ export default function HRActionsLogPage() {
             {/* --- 🚀 MODAL: عرض وطباعة النموذج (A4) 🚀 --- */}
             <AnimatePresence>
                 {selectedAction && (
-                    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4 overflow-y-auto print:bg-white print:p-0">
+                    <div className="fixed inset-0 z-100 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4 overflow-y-auto print:bg-white print:p-0">
                         <motion.div 
                             initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} 
                             className={`w-full max-w-4xl my-auto rounded-[3rem] shadow-2xl overflow-hidden flex flex-col relative print:shadow-none print:w-full print:rounded-none ${isDark ? 'bg-slate-900 border border-slate-700' : 'bg-slate-100'}`}
